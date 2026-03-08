@@ -28,6 +28,7 @@ import iodaRoute from "./routes/ioda.js";
 import ooniRoute from "./routes/ooni.js";
 import threatsRoute from "./routes/threats.js";
 import cleanupRoute from "./routes/cleanup.js";
+import pingRoute from "./routes/ping.js";
 
 const app = express();
 
@@ -88,5 +89,6 @@ app.use("/api/intel/ioda", iodaRoute);
 app.use("/api/intel/ooni", ooniRoute);
 app.use("/api/intel/threats", threatsRoute);
 app.use("/api/cleanup", cleanupRoute);
+app.use("/api/ping", pingRoute);
 
 export default app;
