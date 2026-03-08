@@ -5,7 +5,7 @@
  * CVEs are geo-mapped to affected vendor HQ locations.
  */
 import { Router, type Request, type Response } from "express";
-import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { upsertEvents, readCachedEvents, filterFreshEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 
 const router = Router();
@@ -91,11 +91,10 @@ function cvssToIntensity(score: number): number {
 }
 
 async function fetchNVD(): Promise<IntelEvent[]> {
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60_000);
-    const from = weekAgo.toISOString().replace("Z", "");
-    const to = now.toISOString().replace("Z", "");
-    const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=${from}&pubEndDate=${to}&cvssV3Severity=CRITICAL&resultsPerPage=30`;
+    // Use fixed window: Feb 20, 2026 to Mar 8, 2026
+    const from = "2026-02-20T00:00:00";
+    const to = "2026-03-08T23:59:59";
+    const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?pubStartDate=${from}&pubEndDate=${to}&cvssV3Severity=CRITICAL&resultsPerPage=60`;
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 20000);
@@ -159,7 +158,8 @@ router.get("/", async (_req: Request, res: Response) => {
         let events: IntelEvent[] = [];
         let source = "NIST NVD";
         try {
-            events = await fetchNVD();
+            const raw = await fetchNVD();
+            events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);

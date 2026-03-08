@@ -4,7 +4,7 @@
  * No API key required. Returns active wildfires, storms, volcanoes, floods.
  */
 import { Router, type Request, type Response } from "express";
-import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { upsertEvents, readCachedEvents, filterFreshEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 
 const router = Router();
@@ -69,7 +69,8 @@ router.get("/", async (_req: Request, res: Response) => {
         let events: IntelEvent[] = [];
         let source = "NASA EONET";
         try {
-            events = await fetchEONET();
+            const raw = await fetchEONET();
+            events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);

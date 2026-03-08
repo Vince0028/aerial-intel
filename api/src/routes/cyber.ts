@@ -74,7 +74,7 @@ router.get("/", async (_req: Request, res: Response) => {
         });
 
         // Only keep recent events and cache to Supabase
-        const freshEvents = filterFreshEvents(events, 14);
+        const freshEvents = filterFreshEvents(events, 17);
         upsertEvents(TABLE, freshEvents, "Cloudflare Radar").catch(() => {});
 
         res.json({ events: freshEvents, source: "Cloudflare Radar", count: freshEvents.length });

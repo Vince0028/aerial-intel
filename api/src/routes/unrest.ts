@@ -110,7 +110,7 @@ router.get("/", async (_req: Request, res: Response) => {
 
         // ACLED has a natural data publication lag (weeks-to-months) so we use
         // a wider freshness window. The year filter already prevents ancient data.
-        const freshEvents = filterFreshEvents(events, 540); // ~18 months
+        const freshEvents = filterFreshEvents(events, 17); // Feb 20 – Mar 8 window
         upsertEvents(TABLE, freshEvents, "ACLED API (OAuth)").catch(() => {});
 
         res.json({ events: freshEvents, source: "ACLED API (OAuth)", count: freshEvents.length });

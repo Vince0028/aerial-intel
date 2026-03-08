@@ -5,7 +5,7 @@
  * Country-level outages plotted at centroids.
  */
 import { Router, type Request, type Response } from "express";
-import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { upsertEvents, readCachedEvents, filterFreshEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 import { COUNTRY_CENTROIDS } from "../countryCentroids.js";
 
@@ -25,9 +25,10 @@ function severityToIntensity(level: string): number {
 }
 
 async function fetchIODA(): Promise<IntelEvent[]> {
-    // Fetch country-level outage alerts from the last 24 hours
+    // Fetch country-level outage alerts from Feb 20, 2026
     const until = Math.floor(Date.now() / 1000);
-    const from = until - 24 * 3600; // 24 hours ago
+    const feb20 = Math.floor(new Date("2026-02-20T00:00:00Z").getTime() / 1000);
+    const from = feb20;
     const url = `https://api.ioda.inetintel.cc.gatech.edu/v2/alerts/country?from=${from}&until=${until}&limit=60`;
 
     const ctrl = new AbortController();
@@ -78,7 +79,8 @@ router.get("/", async (_req: Request, res: Response) => {
         let events: IntelEvent[] = [];
         let source = "IODA / Georgia Tech";
         try {
-            events = await fetchIODA();
+            const raw = await fetchIODA();
+            events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);

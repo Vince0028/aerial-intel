@@ -106,7 +106,7 @@ router.get("/", async (_req: Request, res: Response) => {
             }
 
             // Only keep events with recent timestamps (reject old/stale articles)
-            const freshEvents = filterFreshEvents(events, 7);
+            const freshEvents = filterFreshEvents(events, 17);
 
             // Cache to Supabase — await to ensure data is stored for fallback
             upsertEvents(TABLE, freshEvents, "GDELT DOC API v2").catch(e =>

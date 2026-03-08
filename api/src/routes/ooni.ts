@@ -4,7 +4,7 @@
  * No API key required. Tracks web connectivity tests and censorship events.
  */
 import { Router, type Request, type Response } from "express";
-import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { upsertEvents, readCachedEvents, filterFreshEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 import { COUNTRY_CENTROIDS } from "../countryCentroids.js";
 
@@ -25,7 +25,9 @@ function themeToIntensity(themes: string[]): number {
 }
 
 async function fetchOONI(): Promise<IntelEvent[]> {
-    const url = "https://api.ooni.io/api/v1/incidents/search?only_mine=false";
+    // Only fetch incidents since Feb 20, 2026
+    const since = "2026-02-20";
+    const url = `https://api.ooni.io/api/v1/incidents/search?only_mine=false&since=${since}`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
     const res = await fetch(url, { signal: ctrl.signal });
@@ -80,7 +82,8 @@ router.get("/", async (_req: Request, res: Response) => {
         let events: IntelEvent[] = [];
         let source = "OONI / Censorship Monitor";
         try {
-            events = await fetchOONI();
+            const raw = await fetchOONI();
+            events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);

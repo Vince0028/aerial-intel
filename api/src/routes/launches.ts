@@ -4,7 +4,7 @@
  * No API key required. Free tier: 15 requests/hour.
  */
 import { Router, type Request, type Response } from "express";
-import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { upsertEvents, readCachedEvents, filterFreshEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 
 const router = Router();
@@ -75,7 +75,8 @@ router.get("/", async (_req: Request, res: Response) => {
         let events: IntelEvent[] = [];
         let source = "Launch Library 2";
         try {
-            events = await fetchLaunches();
+            const raw = await fetchLaunches();
+            events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);

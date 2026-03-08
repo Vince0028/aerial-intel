@@ -21,7 +21,9 @@ const TYPE_TO_LAYER: Record<string, LayerKey> = {
 };
 
 const Index = () => {
-  const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set(ALL_LAYERS));
+  const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(
+    new Set(ALL_LAYERS.filter(l => l !== 'seismic' && l !== 'weather'))
+  );
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
 
   // Fetch live data from API

@@ -5,7 +5,7 @@
  * Aggregates malicious IPs by country, maps to centroids.
  */
 import { Router, type Request, type Response } from "express";
-import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { upsertEvents, readCachedEvents, filterFreshEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 import { COUNTRY_CENTROIDS } from "../countryCentroids.js";
 
@@ -86,7 +86,8 @@ router.get("/", async (_req: Request, res: Response) => {
         let events: IntelEvent[] = [];
         let source = "AbuseIPDB";
         try {
-            events = await fetchAbuseIPDB();
+            const raw = await fetchAbuseIPDB();
+            events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);

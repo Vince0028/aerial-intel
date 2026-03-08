@@ -5,7 +5,7 @@
  * Data saved to Supabase; old data replaced on each fresh fetch.
  */
 import { Router, type Request, type Response } from "express";
-import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { upsertEvents, readCachedEvents, filterFreshEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 
 const router = Router();
@@ -26,7 +26,9 @@ function magToIntensity(mag: number): number {
 }
 
 async function fetchUSGS(): Promise<IntelEvent[]> {
-    const url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson";
+    // Use FDSNWS query API to get M2.5+ quakes from Feb 20, 2026 (cutoff)
+    const starttime = "2026-02-20";
+    const url = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${starttime}&minmagnitude=2.5&orderby=time&limit=300`;
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12000);
     const res = await fetch(url, { signal: ctrl.signal });
@@ -34,7 +36,7 @@ async function fetchUSGS(): Promise<IntelEvent[]> {
     if (!res.ok) throw new Error(`USGS ${res.status}`);
     const data = await res.json() as any;
 
-    return (data.features || []).slice(0, 80).map((f: any) => {
+    return (data.features || []).slice(0, 200).map((f: any) => {
         const [lng, lat, depth] = f.geometry.coordinates;
         const mag = f.properties.mag ?? 0;
         const place = f.properties.place || "Unknown";
@@ -62,7 +64,8 @@ router.get("/", async (_req: Request, res: Response) => {
         let events: IntelEvent[] = [];
         let source = "USGS Earthquake API";
         try {
-            events = await fetchUSGS();
+            const raw = await fetchUSGS();
+            events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);
