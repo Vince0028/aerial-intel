@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
 
 @layer base {
   :root {
@@ -74,27 +74,30 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    hsl(120 100% 50% / 0.015) 2px,
-    hsl(120 100% 50% / 0.015) 4px
-  );
+  background: repeating-linear-gradient(0deg,
+      transparent,
+      transparent 2px,
+      hsl(120 100% 50% / 0.015) 2px,
+      hsl(120 100% 50% / 0.015) 4px);
 }
 
 /* Tactical border glow */
 .tactical-border {
   border: 1px solid hsl(120 60% 20%);
-  box-shadow: 
+  box-shadow:
     inset 0 0 15px hsl(120 100% 50% / 0.05),
     0 0 5px hsl(120 100% 50% / 0.1);
 }
 
 /* Radar sweep animation */
 @keyframes radar-sweep {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .radar-sweep {
@@ -103,8 +106,17 @@
 
 /* Pulse animation for active markers */
 @keyframes tactical-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 4px hsl(120 100% 50% / 0.5); }
-  50% { opacity: 0.7; box-shadow: 0 0 12px hsl(120 100% 50% / 0.8); }
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 4px hsl(120 100% 50% / 0.5);
+  }
+
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 12px hsl(120 100% 50% / 0.8);
+  }
 }
 
 .tactical-pulse {
@@ -113,8 +125,15 @@
 
 /* Typing cursor */
 @keyframes blink-cursor {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
 }
 
 .cursor-blink::after {
@@ -124,12 +143,31 @@
 
 /* Text flicker */
 @keyframes text-flicker {
-  0%, 100% { opacity: 1; }
-  92% { opacity: 1; }
-  93% { opacity: 0.7; }
-  94% { opacity: 1; }
-  96% { opacity: 0.8; }
-  97% { opacity: 1; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  92% {
+    opacity: 1;
+  }
+
+  93% {
+    opacity: 0.7;
+  }
+
+  94% {
+    opacity: 1;
+  }
+
+  96% {
+    opacity: 0.8;
+  }
+
+  97% {
+    opacity: 1;
+  }
 }
 
 .text-flicker {
@@ -140,6 +178,7 @@
 .globe-container canvas {
   cursor: grab;
 }
+
 .globe-container canvas:active {
   cursor: grabbing;
 }

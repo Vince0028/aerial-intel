@@ -1,42 +1,578 @@
 # Aerial Intel
 
-**Global Command Center** — Real-time tactical intelligence, 3D globe visualization, and asset tracking.
+**Global Command Center** — Real-time tactical intelligence, 3D globe visualization, and asset tracking powered by live data feeds, Supabase caching, and AI.
+
+---
+
+## Table of Contents
+
+- [Architecture Overview](#architecture-overview)
+- [Data Flow](#data-flow)
+- [Project Structure](#project-structure)
+- [Tech Stack](#tech-stack)
+- [Quick Start](#quick-start)
+- [Environment Variables](#environment-variables)
+- [Supabase Setup](#supabase-setup)
+- [API Endpoints](#api-endpoints)
+- [Data Sources](#data-sources)
+- [Frontend Components](#frontend-components)
+- [API Status & Troubleshooting](#api-status--troubleshooting)
+- [Features](#features)
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph TB
+    subgraph External["☁️ External APIs"]
+        GDELT["GDELT 2.0 GEO"]
+        ACLED["ACLED API"]
+        OPENSKY["OpenSky Network"]
+        FIRMS["NASA FIRMS"]
+        CLOUDFLARE["Cloudflare Radar"]
+        GROQ["Groq AI"]
+    end
+
+    subgraph API["🖥️ Express API Server :3001"]
+        ROUTES["API Routes<br/>/api/intel/*"]
+        CACHE["dbCache.ts<br/>upsert / read"]
+        CLIENT["supabaseClient.ts"]
+    end
+
+    subgraph DB["🗄️ Supabase (PostgreSQL)"]
+        T1["conflicts"]
+        T2["unrest"]
+        T3["aviation"]
+        T4["satellite"]
+        T5["cyber"]
+        T6["nuclear"]
+        T7["naval"]
+        T8["bases"]
+    end
+
+    subgraph FE["🌐 React Frontend :8080"]
+        QUERY["TanStack Query<br/>60s auto-refresh"]
+        GLOBE["TacticalGlobe<br/>react-globe.gl"]
+        FEED["IntelFeed"]
+        TRACKER["AssetTracker"]
+        HUD["HudOverlay"]
+    end
+
+    GDELT & ACLED & OPENSKY & FIRMS & CLOUDFLARE --> ROUTES
+    GROQ --> ROUTES
+    ROUTES --> CACHE
+    CACHE --> CLIENT --> DB
+    DB --> CLIENT --> CACHE --> ROUTES
+    ROUTES -->|JSON| QUERY
+    QUERY --> GLOBE & FEED & TRACKER
+    HUD --> GLOBE
+
+    style External fill:#1a1a2e,stroke:#FF3131,color:#fff
+    style API fill:#1a1a2e,stroke:#00D2FF,color:#fff
+    style DB fill:#1a1a2e,stroke:#39FF14,color:#fff
+    style FE fill:#1a1a2e,stroke:#FFBD59,color:#fff
+```
+
+---
+
+## Data Flow
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend<br/>(TanStack Query)
+    participant API as API Server<br/>(Express :3001)
+    participant EXT as External API
+    participant SB as Supabase<br/>(PostgreSQL)
+
+    FE->>API: GET /api/intel/conflicts
+    API->>EXT: Fetch from GDELT/ACLED/etc.
+
+    alt External API succeeds
+        EXT-->>API: JSON response
+        API->>SB: upsertEvents(table, events)
+        SB-->>API: OK
+        API-->>FE: { events: [...], source, count }
+    else External API fails (timeout/auth/404)
+        EXT--xAPI: Error
+        API->>SB: readCachedEvents(table)
+        SB-->>API: Cached events
+        API-->>FE: { events: [...], source: "Supabase cache" }
+    end
+
+    Note over FE: Auto-refetches every 60s
+```
+
+### Static Data Routes (Nuclear, Naval, Bases)
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as API Server
+    participant SB as Supabase
+
+    FE->>API: GET /api/intel/nuclear
+    API->>SB: readCachedEvents("nuclear")
+
+    alt Cache has data
+        SB-->>API: Seeded events
+        API-->>FE: { events: [...], source: "Supabase" }
+    else Cache is empty
+        SB-->>API: []
+        API->>SB: upsertEvents("nuclear", STATIC_DATA)
+        SB-->>API: OK
+        API-->>FE: { events: [...], source: "Seed data" }
+    end
+```
+
+---
 
 ## Project Structure
 
 ```
 aerial-intel/
-├── frontend/   # React + Vite frontend application
-├── backend/    # Backend services (coming soon)
-├── api/        # API layer (coming soon)
-└── README.md
+├── README.md
+├── api/                          # Express.js API proxy + Supabase cache
+│   ├── .env                      # API keys & Supabase credentials
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── supabase-migration.sql    # Database schema (8 tables + RLS)
+│   └── src/
+│       ├── server.ts             # Express app, CORS, route mounting
+│       ├── types.ts              # Shared TypeScript types
+│       ├── supabaseClient.ts     # Singleton Supabase client
+│       ├── dbCache.ts            # upsertEvents() & readCachedEvents()
+│       └── routes/
+│           ├── conflicts.ts      # GDELT → /api/intel/conflicts
+│           ├── unrest.ts         # ACLED → /api/intel/unrest
+│           ├── aviation.ts       # OpenSky → /api/intel/aviation
+│           ├── satellite.ts      # NASA FIRMS → /api/intel/satellite
+│           ├── cyber.ts          # Cloudflare → /api/intel/cyber
+│           ├── nuclear.ts        # Static seed → /api/intel/nuclear
+│           ├── naval.ts          # Static seed → /api/intel/naval
+│           ├── bases.ts          # Static seed → /api/intel/bases
+│           └── predict.ts        # Groq AI → /api/intel/predict
+├── frontend/                     # React + Vite frontend
+│   ├── package.json
+│   ├── vite.config.ts            # Dev proxy → :3001
+│   ├── tailwind.config.ts
+│   └── src/
+│       ├── App.tsx               # Router setup
+│       ├── main.tsx              # Entry point + QueryClient
+│       ├── pages/
+│       │   └── Index.tsx         # Main page — orchestrates all panels
+│       ├── hooks/
+│       │   └── useIntelData.ts   # TanStack Query hooks for all endpoints
+│       ├── data/
+│       │   └── tacticalData.ts   # Layer colors, labels, types
+│       └── components/
+│           ├── TacticalGlobe.tsx  # 3D globe (react-globe.gl)
+│           ├── IntelFeed.tsx      # Live intel message feed
+│           ├── AssetTracker.tsx   # Asset counts & selected asset info
+│           ├── StatusBar.tsx      # Bottom status bar
+│           ├── HudOverlay.tsx     # Tactical HUD overlay
+│           ├── LayerLegend.tsx    # Layer toggle legend
+│           ├── GlobeMarker.ts    # SVG marker definitions
+│           ├── GlobeSprites.ts   # Canvas sprite rendering
+│           └── ui/               # shadcn/ui components
+└── backend/                      # Reserved for future services
 ```
+
+---
 
 ## Tech Stack
 
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS, shadcn/ui
-- **3D Visualization**: Three.js
-- **State Management**: TanStack React Query
+```mermaid
+graph LR
+    subgraph Frontend
+        React["React 18"]
+        Vite["Vite 5"]
+        TW["Tailwind CSS"]
+        TQ["TanStack Query"]
+        Globe["react-globe.gl"]
+        Three["Three.js"]
+        Shadcn["shadcn/ui"]
+    end
 
-## Getting Started
+    subgraph Backend
+        Express["Express 4"]
+        TSX["tsx (hot reload)"]
+        TS["TypeScript"]
+    end
 
-```sh
-# Navigate to the frontend directory
-cd frontend
+    subgraph Database
+        Supa["Supabase"]
+        PG["PostgreSQL"]
+        RLS["Row Level Security"]
+    end
 
-# Install dependencies
-npm install
+    subgraph AI
+        Groq["Groq Cloud"]
+        Llama["llama-3.3-70b"]
+    end
 
-# Start the development server
-npm run dev
+    React --> TQ --> Express --> Supa --> PG
+    Globe --> Three
+    Express --> Groq
+
+    style Frontend fill:#1e293b,stroke:#00D2FF,color:#fff
+    style Backend fill:#1e293b,stroke:#39FF14,color:#fff
+    style Database fill:#1e293b,stroke:#FF3131,color:#fff
+    style AI fill:#1e293b,stroke:#FFBD59,color:#fff
 ```
 
-The app will be available at `http://localhost:8080`.
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui |
+| **3D Globe** | Three.js, react-globe.gl, custom SVG markers |
+| **API Proxy** | Express.js, TypeScript, tsx (hot reload) |
+| **Database** | Supabase (PostgreSQL), RLS policies |
+| **AI** | Groq — llama-3.3-70b-versatile |
+| **State** | TanStack React Query (60s auto-refresh) |
+
+---
+
+## Quick Start
+
+```sh
+# 1. Clone & install
+git clone <repo-url>
+cd aerial-intel
+
+# 2. Set up the API server
+cd api
+cp .env.example .env        # Fill in your API keys (see Environment Variables)
+npm install
+npm run dev                  # Starts on port 3001
+
+# 3. Set up the frontend (separate terminal)
+cd frontend
+npm install
+npm run dev                  # Starts on port 8080, proxies /api → :3001
+
+# 4. Set up Supabase (see Supabase Setup section)
+# Run supabase-migration.sql in your Supabase SQL editor
+```
+
+---
+
+## Environment Variables
+
+Create `api/.env` with these keys:
+
+```env
+# ——— Supabase (REQUIRED) ———
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIs...
+
+# ——— External API Keys ———
+ACLED_EMAIL=your@email.edu
+ACLED_KEY=your-acled-key
+
+OPENSKY_USER=your-username
+OPENSKY_PASS=your-password
+
+NASA_FIRMS_KEY=your-firms-key
+
+CLOUDFLARE_RADAR_TOKEN=your-cf-token
+
+GROQ_API_KEY=gsk_your-groq-key
+```
+
+---
+
+## Supabase Setup
+
+1. Create a free project at [supabase.com](https://supabase.com)
+2. Go to **SQL Editor** and run the migration file:
+
+```sql
+-- File: api/supabase-migration.sql
+-- Creates 8 tables: conflicts, unrest, aviation, satellite, cyber, nuclear, naval, bases
+-- Each table has: id, type, lat, lng, intensity, label, color, timestamp, meta, source, fetched_at
+-- RLS policies grant anon full CRUD access
+-- Indexes on fetched_at for cache eviction
+```
+
+3. Copy your **Project URL** and **anon public key** from **Settings → API** into `api/.env`
+
+### Database Schema
+
+```mermaid
+erDiagram
+    conflicts {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+    unrest {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+
+    aviation {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+
+    satellite {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+
+    cyber {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+
+    nuclear {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+
+    naval {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+
+    bases {
+        text id PK
+        text type
+        float8 lat
+        float8 lng
+        int4 intensity
+        text label
+        text color
+        timestamptz timestamp
+        jsonb meta
+        text source
+        timestamptz fetched_at
+    }
+```
+
+> All 8 tables share an identical schema. The `meta` column is JSONB for flexible per-category data (callsign, heading, vessel type, branch, etc.).
+
+---
+
+## API Endpoints
+
+All endpoints return the unified `ApiResponse` schema:
+
+```json
+{
+  "events": [
+    {
+      "id": "EVT-001",
+      "type": "COMBAT",
+      "lat": 50.45,
+      "lng": 30.52,
+      "intensity": 8,
+      "label": "Artillery exchange near Kyiv",
+      "color": "#FF3131",
+      "timestamp": "2025-01-15T14:32:07Z",
+      "meta": { "source": "GDELT" }
+    }
+  ],
+  "source": "GDELT → Supabase",
+  "count": 1
+}
+```
+
+| Method | Endpoint | Source | Description |
+|--------|----------|--------|-------------|
+| `GET` | `/api/health` | — | Server status + endpoint list |
+| `GET` | `/api/intel/conflicts` | GDELT 2.0 | Armed conflict events |
+| `GET` | `/api/intel/unrest` | ACLED | Protests, riots, civil unrest |
+| `GET` | `/api/intel/aviation` | OpenSky | Live aircraft positions |
+| `GET` | `/api/intel/satellite` | NASA FIRMS | Thermal hotspots (fire/explosion) |
+| `GET` | `/api/intel/cyber` | Cloudflare Radar | Internet outages & anomalies |
+| `GET` | `/api/intel/nuclear` | Static seed | Nuclear facility locations |
+| `GET` | `/api/intel/naval` | Static seed | Naval positions (CSGs, destroyers) |
+| `GET` | `/api/intel/bases` | Static seed | Military installations worldwide |
+| `POST` | `/api/intel/predict` | Groq AI | AI flight path prediction |
+
+---
+
+## Data Sources
+
+### Live API Sources
+
+| Category | API | Auth | Status |
+|----------|-----|------|--------|
+| ⚔️ **Combat** | [GDELT 2.0 GEO API](https://api.gdeltproject.org) | Free, no key | ⚠️ Endpoint returns 404 |
+| 📢 **Unrest** | [ACLED API](https://acleddata.com) | Free .edu email | ⚠️ Auth returning 400 |
+| ✈️ **Aviation** | [OpenSky Network](https://opensky-network.org) | Free account | ⚠️ Returns 401 |
+| 🛰️ **Satellite** | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov) | Free MAP_KEY | ⚠️ Request timeout |
+| 📡 **Cyber** | [Cloudflare Radar](https://radar.cloudflare.com) | Free token | ⚠️ Returns 400 |
+
+### Static Seed Sources (always available)
+
+| Category | Data | Events |
+|----------|------|--------|
+| ☢️ **Nuclear** | Known nuclear facility coordinates | 12 sites |
+| ⚓ **Naval** | Carrier strike groups & destroyers | 12 assets |
+| 🛡️ **Bases** | Major military installations | 12 bases |
+
+### AI Prediction
+
+| Feature | Provider | Model |
+|---------|----------|-------|
+| 🤖 **Flight Prediction** | [Groq](https://console.groq.com) | llama-3.3-70b-versatile |
+
+---
+
+## Frontend Components
+
+```mermaid
+graph TB
+    subgraph Page["Index.tsx (Main Page)"]
+        direction TB
+        HEADER["Header — Layer count + Live status"]
+        LEFT["IntelFeed — Live message feed"]
+        CENTER["TacticalGlobe — 3D globe"]
+        RIGHT["AssetTracker — Counts + selected asset"]
+        BOTTOM["StatusBar — System status"]
+        LEGEND["LayerLegend — Toggle layers"]
+        HUD["HudOverlay — Tactical HUD"]
+    end
+
+    subgraph Data["Data Layer"]
+        HOOK["useAllIntelData()"]
+        TQ2["TanStack Query"]
+        API2["API Server /api/intel/*"]
+    end
+
+    HOOK --> LEFT & CENTER & RIGHT & BOTTOM
+    TQ2 --> HOOK
+    API2 --> TQ2
+    LEGEND --> CENTER
+    HUD --> CENTER
+
+    style Page fill:#0f172a,stroke:#00D2FF,color:#fff
+    style Data fill:#0f172a,stroke:#39FF14,color:#fff
+```
+
+| Component | Purpose |
+|-----------|---------|
+| `TacticalGlobe` | 3D interactive globe with points, rings, arcs, and custom SVG markers |
+| `IntelFeed` | Real-time scrolling feed of intel events, sorted by priority |
+| `AssetTracker` | Shows event counts per layer + details of selected asset |
+| `LayerLegend` | Clickable legend to toggle globe layers on/off |
+| `HudOverlay` | Tactical heads-up display overlay on the globe |
+| `StatusBar` | Footer showing layer counts and connection status |
+| `GlobeMarker` | SVG icon definitions for each event category |
+| `GlobeSprites` | Canvas-based sprite rendering for globe points |
+
+---
+
+## API Status & Troubleshooting
+
+### Current API Issues (as of testing)
+
+| Endpoint | Error | Likely Cause | Fix |
+|----------|-------|-------------|-----|
+| `/intel/conflicts` | 502 (GDELT 404) | GDELT GEO endpoint may have moved | Check [GDELT docs](https://blog.gdeltproject.org/gdelt-geo-2-0-api-searching-the-world/) for updated URL |
+| `/intel/unrest` | 400 (ACLED auth) | OAuth token format changed | Re-check [ACLED access](https://acleddata.com/acleddatanew/wp-content/uploads/2021/11/ACLED_APInstructions.pdf) |
+| `/intel/aviation` | 401 (OpenSky) | Credentials rejected or rate limit | Register new account at [OpenSky](https://opensky-network.org/index.php/-/login) |
+| `/intel/satellite` | Timeout | NASA FIRMS slow or key expired | Regenerate key at [FIRMS](https://firms.modaps.eosdis.nasa.gov/api/area/) |
+| `/intel/cyber` | 400 (Cloudflare) | Token invalid or API v4 change | Create new token at [Cloudflare dashboard](https://dash.cloudflare.com/profile/api-tokens) |
+
+> **Note:** When external APIs fail, the API server automatically falls back to reading cached data from Supabase. Data will still appear on the globe if it was previously fetched successfully.
+
+### Suggested Free Military/OSINT APIs
+
+| API | Category | Free? | Description |
+|-----|----------|-------|-------------|
+| [GDELT DOC API](https://api.gdeltproject.org/api/v2/doc/doc) | Conflicts | ✅ | Alternative GDELT endpoint — full-text search with geo extraction. More reliable than GEO API. |
+| [ACLED Direct Export](https://acleddata.com/data-export-tool/) | Unrest | ✅ (with account) | CSV download instead of OAuth endpoint — simpler auth flow. |
+| [ADS-B Exchange](https://www.adsbexchange.com/data/) | Aviation | ✅ (RapidAPI) | Community-driven aircraft tracking, free tier via RapidAPI. |
+| [FlightAware AeroAPI](https://www.flightaware.com/aeroapi/) | Aviation | ✅ (limited) | Flight tracking with 500 free queries/month. |
+| [NASA EONET](https://eonet.gsfc.nasa.gov/api/v3/events) | Satellite/Events | ✅ | Earth Observatory Natural Event Tracker — no key required. |
+| [USGS Earthquake API](https://earthquake.usgs.gov/fdsnws/event/1/) | Seismic | ✅ | Real-time earthquake data — no key, JSON format. |
+| [Global Terrorism Database](https://www.start.umd.edu/gtd/) | Terrorism | ✅ (academic) | Historical terrorism events with lat/lng. |
+| [SIPRI Arms Transfers](https://armstrade.sipri.org/armstrade/page/values.php) | Military | ✅ | Arms transfer data between countries. |
+| [Military Periscope](https://www.militaryperiscope.com/) | Bases/Assets | ✅ (limited) | Order of battle & equipment databases. |
+| [MarineTraffic API](https://www.marinetraffic.com/en/ais-api-services) | Naval | ⚠️ Free trial | AIS vessel tracking (better than OpenShipData). |
+| [Shodan](https://www.shodan.io/) | Cyber | ✅ (limited) | Internet-facing device scanner, good for cyber threat mapping. |
+
+---
 
 ## Features
 
-- 🌍 Interactive 3D tactical globe with real-time data layers
-- 📡 Live intel feed with threat classification
-- 🛰️ Multi-layer asset tracking (combat, aviation, naval, satellite, cyber, nuclear)
-- 🎯 HUD overlay with tactical information
-- 📊 Status bar with system metrics
+- 🌍 Interactive 3D tactical globe with animated category-specific SVG markers
+- 📡 Live intel feed generated from real API events, sorted by priority
+- 🗄️ Supabase (PostgreSQL) caching — data persists even when external APIs fail
+- 🛰️ 8 data layers: combat, unrest, aviation, naval, satellite, cyber, nuclear, bases
+- 🤖 AI-powered flight path prediction via Groq (llama-3.3-70b-versatile)
+- 🎯 HUD overlay with tactical styling
+- 📊 Auto-refreshing data (60s intervals via TanStack Query)
+- 🔒 Row Level Security on all Supabase tables
+- ⚡ Hot module reload in dev (Vite frontend + tsx API server)
+
+---
+
+## License
+
+MIT

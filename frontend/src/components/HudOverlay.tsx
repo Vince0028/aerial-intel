@@ -1,25 +1,42 @@
 export default function HudOverlay() {
   return (
     <>
-      {/* Top-left system status */}
-      <div className="absolute top-3 left-3 z-10 tactical-border bg-background/70 backdrop-blur-sm p-2 text-[9px] leading-relaxed">
-        <div className="text-muted-foreground">GLOBAL C2 TACTICAL DISPLAY</div>
-        <div className="text-foreground">MODE: <span className="text-tactical-glow">SURVEILLANCE</span></div>
-        <div className="text-foreground">CLASSIFICATION: <span className="text-tactical-amber">UNCLASSIFIED</span></div>
+      {/* Mode / Classification */}
+      <div className="absolute top-3 left-3 z-10 tactical-border bg-card/80 px-3 py-2">
+        <div className="text-[9px] text-muted-foreground tracking-[0.2em] mb-1">GLOBAL C2 TACTICAL DISPLAY</div>
+        <div className="text-[10px]">
+          <span className="text-muted-foreground">MODE: </span>
+          <span className="text-tactical-glow">SURVEILLANCE</span>
+        </div>
+        <div className="text-[10px]">
+          <span className="text-muted-foreground">CLASSIFICATION: </span>
+          <span className="text-tactical-amber font-bold">UNCLASSIFIED</span>
+        </div>
       </div>
 
-      {/* Top-right coordinates */}
-      <div className="absolute top-3 right-3 z-10 tactical-border bg-background/70 backdrop-blur-sm p-2 text-[9px]">
-        <div className="text-muted-foreground">VIEWPORT</div>
+      {/* Viewport */}
+      <div className="absolute top-3 right-72 z-10 tactical-border bg-card/80 px-3 py-2 text-[9px]">
+        <div className="text-muted-foreground tracking-[0.15em]">VIEWPORT</div>
         <div className="text-foreground">ALT: 2200km</div>
         <div className="text-foreground">FOV: GLOBAL</div>
       </div>
 
-      {/* Corner brackets */}
-      <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-primary/40 z-10" />
-      <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-primary/40 z-10" />
-      <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-primary/40 z-10" />
-      <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-primary/40 z-10" />
+      {/* Arc Legend */}
+      <div className="absolute top-24 left-3 z-10 tactical-border bg-card/80 px-3 py-2 text-[9px]">
+        <div className="text-muted-foreground tracking-[0.15em] mb-1.5">ARC ROUTES</div>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-4 h-0.5" style={{ background: '#FF3131' }} />
+          <span className="text-[#FF3131]">Military Deployment</span>
+        </div>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-4 h-0.5" style={{ background: '#39FF14' }} />
+          <span className="text-[#39FF14]">Supply / Logistics</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-0.5" style={{ background: '#00D2FF' }} />
+          <span className="text-[#00D2FF]">Intel / Comms Link</span>
+        </div>
+      </div>
     </>
   );
 }

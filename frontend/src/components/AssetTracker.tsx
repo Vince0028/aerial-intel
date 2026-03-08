@@ -1,27 +1,21 @@
-import {
-  MOCK_FLIGHTS, MOCK_NAVAL, MOCK_SATELLITE, MOCK_CYBER,
-  MOCK_NUCLEAR, MOCK_BASES, MOCK_EVENTS,
-  LAYER_COLORS, type LayerKey,
-} from '@/data/tacticalData';
+import { LAYER_COLORS, LAYER_LABELS, type LayerKey } from '@/data/tacticalData';
 
 interface AssetTrackerProps {
   selectedAsset?: any;
   activeLayers: Set<LayerKey>;
+  layerCounts: Record<string, number>;
 }
 
-export default function AssetTracker({ selectedAsset, activeLayers }: AssetTrackerProps) {
-  // Count totals
-  const counts: { label: string; count: number; color: string; layer: LayerKey }[] = [
-    { label: '✈ Aircraft', count: MOCK_FLIGHTS.length, color: LAYER_COLORS.aviation, layer: 'aviation' },
-    { label: '⚓ Naval', count: MOCK_NAVAL.length, color: LAYER_COLORS.naval, layer: 'naval' },
-    { label: '⚔ Conflicts', count: MOCK_EVENTS.length, color: LAYER_COLORS.combat, layer: 'combat' },
-    { label: '🛰 Sat Hits', count: MOCK_SATELLITE.length, color: LAYER_COLORS.satellite, layer: 'satellite' },
-    { label: '📡 Cyber', count: MOCK_CYBER.length, color: LAYER_COLORS.cyber, layer: 'cyber' },
-    { label: '☢ Nuclear', count: MOCK_NUCLEAR.length, color: LAYER_COLORS.nuclear, layer: 'nuclear' },
-    { label: '🛡 Bases', count: MOCK_BASES.length, color: LAYER_COLORS.base, layer: 'base' },
-  ];
-
-  const activeAssets = counts.filter(c => activeLayers.has(c.layer));
+export default function AssetTracker({ selectedAsset, activeLayers, layerCounts }: AssetTrackerProps) {
+  const layers = Object.keys(LAYER_COLORS) as LayerKey[];
+  const activeEntries = layers
+    .filter(l => activeLayers.has(l))
+    .map(l => ({
+      layer: l,
+      label: LAYER_LABELS[l],
+      count: layerCounts[l] || 0,
+      color: LAYER_COLORS[l],
+    }));
 
   return (
     <div className="flex flex-col h-full">
@@ -31,8 +25,8 @@ export default function AssetTracker({ selectedAsset, activeLayers }: AssetTrack
 
       {/* Summary grid */}
       <div className="space-y-1 mb-3">
-        {activeAssets.map(c => (
-          <div key={c.label} className="flex items-center justify-between text-[9px] px-1">
+        {activeEntries.map(c => (
+          <div key={c.layer} className="flex items-center justify-between text-[9px] px-1">
             <span style={{ color: c.color }}>{c.label}</span>
             <span className="text-foreground font-medium">{c.count}</span>
           </div>
@@ -45,7 +39,7 @@ export default function AssetTracker({ selectedAsset, activeLayers }: AssetTrack
           <div className="text-[9px] text-tactical-glow font-bold mb-1.5">▸ SELECTED</div>
           <div className="text-[9px] space-y-0.5">
             {Object.entries(selectedAsset).map(([key, val]) => {
-              if (key === 'category' || key === 'raw') return null;
+              if (key === 'category' || key === 'raw' || key === 'meta') return null;
               return (
                 <div key={key} className="flex justify-between gap-2">
                   <span className="text-muted-foreground uppercase">{key}</span>
@@ -57,35 +51,15 @@ export default function AssetTracker({ selectedAsset, activeLayers }: AssetTrack
         </div>
       )}
 
-      {/* Aircraft list */}
-      {activeLayers.has('aviation') && (
-        <>
-          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 mt-1">Aircraft</div>
-          <div className="flex-1 overflow-y-auto space-y-0.5">
-            {MOCK_FLIGHTS.map(f => (
-              <div key={f.id} className="flex items-center justify-between px-1 py-0.5 text-[9px] hover:bg-secondary/50 cursor-pointer rounded-sm">
-                <span style={{ color: LAYER_COLORS.aviation }}>✈ {f.callsign}</span>
-                <span className="text-muted-foreground">{f.alt.toLocaleString()}'</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Naval list */}
-      {activeLayers.has('naval') && (
-        <>
-          <div className="text-[9px] text-muted-foreground uppercase tracking-widest mb-1 mt-2">Naval Assets</div>
-          <div className="overflow-y-auto space-y-0.5 max-h-32">
-            {MOCK_NAVAL.map(n => (
-              <div key={n.id} className="flex items-center justify-between px-1 py-0.5 text-[9px] hover:bg-secondary/50 cursor-pointer rounded-sm">
-                <span style={{ color: LAYER_COLORS.naval }}>⚓ {n.name}</span>
-                <span className="text-muted-foreground text-[8px]">{n.type}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+      {/* Total active count */}
+      <div className="mt-auto pt-2 border-t border-border text-[9px] text-muted-foreground">
+        <div className="flex justify-between">
+          <span>TOTAL TRACKED</span>
+          <span className="text-foreground font-medium">
+            {activeEntries.reduce((sum, c) => sum + c.count, 0)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,167 @@
+/* ═══════════════════════════════════════════
+   GLOBE MARKER ANIMATIONS & STYLES
+   Custom 3D icons per intel category
+   ═══════════════════════════════════════════ */
+
+/* Shared marker base */
+.globe-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  pointer-events: auto;
+  position: relative;
+}
+.globe-marker:hover {
+  transform: scale(1.6);
+  z-index: 100;
+  filter: brightness(1.4);
+}
+
+.globe-marker svg {
+  width: 22px;
+  height: 22px;
+  filter: drop-shadow(0 0 4px var(--marker-color, #fff));
+}
+
+/* ——— COMBAT: Pulsing crosshair ——— */
+.marker-combat svg { color: #FF3131; --marker-color: #FF3131; }
+.marker-combat::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 1.5px solid #FF313199;
+  border-radius: 50%;
+  animation: marker-pulse 1.5s ease-in-out infinite;
+}
+
+/* ——— UNREST: Amber warning ——— */
+.marker-unrest svg { color: #FFBD59; --marker-color: #FFBD59; }
+.marker-unrest::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 1px solid #FFBD5966;
+  border-radius: 50%;
+  animation: marker-pulse 2s ease-in-out infinite;
+}
+
+/* ——— DANGER: Orange glow ——— */
+.marker-danger svg { color: #FF6B35; --marker-color: #FF6B35; }
+
+/* ——— NUCLEAR: Glowing green trefoil ——— */
+.marker-nuclear svg { color: #39FF14; --marker-color: #39FF14; }
+.marker-nuclear::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #39FF1425 0%, transparent 70%);
+  animation: nuke-glow 2s ease-in-out infinite alternate;
+}
+
+/* ——— AVIATION: Cyan plane, rotates to heading ——— */
+.marker-aviation svg { color: #00D2FF; --marker-color: #00D2FF; }
+.marker-aviation {
+  transition: transform 0.5s ease;
+}
+
+/* ——— NAVAL: Purple anchor + sonar wave ——— */
+.marker-naval svg { color: #7D5FFF; --marker-color: #7D5FFF; }
+.marker-naval::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border: 1px solid #7D5FFF55;
+  border-radius: 50%;
+  animation: sonar-sweep 3s ease-out infinite;
+}
+
+/* ——— SATELLITE: Magenta dish + scan ——— */
+.marker-satellite svg { color: #FF00FF; --marker-color: #FF00FF; }
+.marker-satellite::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border: 1.5px solid #FF00FF44;
+  border-radius: 50%;
+  animation: scan-sweep 2s linear infinite;
+}
+
+/* ——— CYBER: Pink signal wave ——— */
+.marker-cyber svg { color: #FF1493; --marker-color: #FF1493; }
+.marker-cyber::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 1px solid #FF149355;
+  border-radius: 50%;
+  animation: signal-wave 1.8s ease-out infinite;
+}
+
+/* ——— BASES: White shield ——— */
+.marker-base svg { color: #FFFFFF; --marker-color: #FFFFFF; }
+.marker-base::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #FFFFFF15 0%, transparent 70%);
+}
+
+/* ═══ KEYFRAMES ═══ */
+
+@keyframes marker-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.5); opacity: 0; }
+}
+
+@keyframes nuke-glow {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.3); opacity: 1; }
+}
+
+@keyframes sonar-sweep {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+@keyframes scan-sweep {
+  0% { transform: scale(0.8) rotate(0deg); opacity: 0.8; }
+  50% { transform: scale(1.3) rotate(180deg); opacity: 0.4; }
+  100% { transform: scale(0.8) rotate(360deg); opacity: 0.8; }
+}
+
+@keyframes signal-wave {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+/* Marker tooltip */
+.marker-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid var(--marker-color, #fff);
+  padding: 6px 10px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: var(--marker-color, #fff);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 200;
+  max-width: 280px;
+  white-space: normal;
+  text-align: center;
+}
+.globe-marker:hover .marker-tooltip {
+  opacity: 1;
+}
