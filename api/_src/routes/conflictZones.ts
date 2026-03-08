@@ -17,7 +17,7 @@ let zoneCache: { zones: ConflictZone[]; ts: number } | null = null;
 const MEM_TTL = 60 * 60 * 1000;
 
 // Bump this whenever BASE_CONFLICT_ZONES changes -- forces Supabase re-seed on next request
-const ZONE_VERSION = "2026-03-08-v3";
+const ZONE_VERSION = "2026-03-08-v4";
 
 /**
  * HARDCODED base list -- all active wars and conflicts as of March 2026.
@@ -76,9 +76,9 @@ const ISO_CENTROIDS: Record<string, [number, number]> = {
     HTI: [18.9, -72.3], BFA: [12.4, -1.6], MLI: [17.6, -4.0], NGA: [9.1, 8.7],
     LBY: [26.3, 17.2], MOZ: [-18.7, 35.5], COL: [4.6, -74.3], AFG: [33.9, 67.7],
     IRQ: [33.2, 43.7], IRN: [32.4, 53.7], LBN: [33.9, 35.5], MEX: [23.6, -102.5],
-    PAK: [30.4, 69.3], PHL: [12.9, 121.8], CAF: [7.0, 21.0], NER: [17.6, 8.1],
+    PAK: [30.4, 69.3], CAF: [7.0, 21.0], NER: [17.6, 8.1],
     TCD: [15.5, 18.7], KEN: [-0.02, 37.9], CMR: [3.9, 11.5], UGA: [1.4, 32.3],
-    VEN: [6.4, -66.6], ZWE: [-20.0, 29.2], TZA: [-6.4, 34.9], PRK: [40.3, 127.5],
+    VEN: [6.4, -66.6], PRK: [40.3, 127.5],
 };
 
 function zonesToEvents(zones: ConflictZone[]): IntelEvent[] {
