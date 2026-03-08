@@ -1,11 +1,28 @@
-# Aerial Intel
+<div align="center">
 
-**Global Command Center** — Real-time tactical intelligence, 3D globe visualization, and asset tracking powered by live data feeds, Supabase caching, and AI.
+# ⚡ AERIAL INTEL
+
+### Global Command Center — Real-Time Tactical Intelligence
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+[![Groq AI](https://img.shields.io/badge/Groq-AI%20Powered-F55036?style=for-the-badge&logo=groq&logoColor=white)](https://groq.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
+**A military-grade tactical intelligence dashboard built on a 3D interactive globe.**
+Live conflict zones, aircraft, naval vessels, cyber threats, nuclear sites, and AI-generated SITREPs — all in one command center.
+
+[**Live Demo**](https://aerial-intel.vercel.app) · [**API Docs**](#api-endpoints) · [**Quick Start**](#quick-start)
 
 ---
 
+</div>
+
 ## Table of Contents
 
+- [Features](#features)
 - [Architecture Overview](#architecture-overview)
 - [Data Flow](#data-flow)
 - [Project Structure](#project-structure)
@@ -17,7 +34,45 @@
 - [Data Sources](#data-sources)
 - [Frontend Components](#frontend-components)
 - [API Status & Troubleshooting](#api-status--troubleshooting)
-- [Features](#features)
+
+---
+
+## Features
+
+<table>
+<tr>
+<td width="50%">
+
+**🌍 3D Tactical Globe**
+Interactive globe with animated canvas sprites, hex-bin layers, arcs, seismic rings, and AI-drawn conflict zone polygons
+
+**📡 12 Live Intelligence Layers**
+Combat · Unrest · Aviation · Naval · Satellite · Cyber · Nuclear · Bases · Infrastructure · Data Centers · Oil Sites · Danger
+
+**🤖 Multi-Model AI Intelligence**
+Groq-powered SITREPs, flight path prediction, and conflict zone analysis across 3 LLM models (70B / 8x7B / 8B)
+
+**🗺️ Conflict Zone Polygons**
+27 active war zones highlighted as country polygons with severity ratings, start dates, and real-time threat levels
+
+</td>
+<td width="50%">
+
+**🗄️ Resilient Supabase Caching**
+PostgreSQL-backed cache with Row Level Security — data persists and serves when all external APIs are down
+
+**⚓ Live Maritime Tracking**
+Digitraffic AIS with SOG-filter (>2 kn, <2h age) + 99-base military seed across 43 countries
+
+**🛡️ 99 Military Bases**
+Global military installations across 43 countries with animated Pentagon command link arcs
+
+**⚡ 60-Second Auto-Refresh**
+TanStack Query handles all cache-and-refetch cycles — no manual refresh ever needed
+
+</td>
+</tr>
+</table>
 
 ---
 
@@ -198,78 +253,55 @@ aerial-intel/
 
 ## Tech Stack
 
-```mermaid
-graph LR
-    subgraph Frontend
-        React["React 18"]
-        Vite["Vite 5"]
-        TW["Tailwind CSS"]
-        TQ["TanStack Query"]
-        Globe["react-globe.gl"]
-        Three["Three.js"]
-        Shadcn["shadcn/ui"]
-    end
-
-    subgraph Backend
-        Express["Express 4"]
-        TSX["tsx (hot reload)"]
-        TS["TypeScript"]
-    end
-
-    subgraph Database
-        Supa["Supabase"]
-        PG["PostgreSQL"]
-        RLS["Row Level Security"]
-    end
-
-    subgraph AI
-        Groq["Groq Cloud"]
-        Llama["llama-3.3-70b"]
-    end
-
-    React --> TQ --> Express --> Supa --> PG
-    Globe --> Three
-    Express --> Groq
-
-    style Frontend fill:#1e293b,stroke:#00D2FF,color:#fff
-    style Backend fill:#1e293b,stroke:#39FF14,color:#fff
-    style Database fill:#1e293b,stroke:#FF3131,color:#fff
-    style AI fill:#1e293b,stroke:#FFBD59,color:#fff
-```
+<div align="center">
 
 | Layer | Technologies |
-|-------|-------------|
-| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui, topojson-client |
-| **3D Globe** | Three.js, react-globe.gl, custom canvas sprites, conflict zone polygons |
-| **API Proxy** | Express.js, TypeScript, tsx (hot reload) |
-| **Database** | Supabase (PostgreSQL), RLS policies, 10 intel tables + AI summaries |
-| **AI** | Groq — llama-3.3-70b-versatile, mixtral-8x7b-32768, llama-3.1-8b-instant |
-| **State** | TanStack React Query (60s auto-refresh) |
-| **Maritime** | Digitraffic (Finnish Transport) live AIS tracking |
+|:------|:-------------|
+| 🖥️ **Frontend** | React 18 · TypeScript · Vite 5 · Tailwind CSS · shadcn/ui · topojson-client |
+| 🌐 **3D Globe** | Three.js · react-globe.gl · custom canvas sprites · conflict zone polygons |
+| 🔌 **API Server** | Express.js · TypeScript · tsx (hot reload) |
+| 🗄️ **Database** | Supabase · PostgreSQL · Row Level Security · 10 intel tables |
+| 🤖 **AI Models** | Groq · `llama-3.3-70b-versatile` · `mixtral-8x7b-32768` · `llama-3.1-8b-instant` |
+| 🔄 **State / Cache** | TanStack React Query · 60 s auto-refresh · Supabase fallback |
+| ⚓ **Maritime** | Digitraffic AIS (Finnish Transport Infrastructure) |
+
+</div>
 
 ---
 
 ## Quick Start
 
+> **Prerequisites:** Node.js 18+, a free [Supabase](https://supabase.com) project, and a free [Groq](https://console.groq.com) API key.
+
+**Step 1 — Clone the repository**
 ```sh
-# 1. Clone & install
-git clone <repo-url>
+git clone https://github.com/your-username/aerial-intel.git
 cd aerial-intel
+```
 
-# 2. Set up the API server
+**Step 2 — Configure the API server**
+```sh
 cd api
-cp .env.example .env        # Fill in your API keys (see Environment Variables)
+cp .env.example .env   # Add your API keys — see Environment Variables below
 npm install
-npm run dev                  # Starts on port 3001
+npm run dev            # API starts on http://localhost:3001
+```
 
-# 3. Set up the frontend (separate terminal)
+**Step 3 — Start the frontend** *(separate terminal)*
+```sh
 cd frontend
 npm install
-npm run dev                  # Starts on port 8080, proxies /api → :3001
-
-# 4. Set up Supabase (see Supabase Setup section)
-# Run supabase-migration.sql in your Supabase SQL editor
+npm run dev            # App starts on http://localhost:8080 (proxies /api → :3001)
 ```
+
+**Step 4 — Seed Supabase**
+```sh
+# In your Supabase project → SQL Editor → paste and run:
+# api/supabase-migration.sql
+# This creates all 10 intel tables with RLS policies.
+```
+
+Open `http://localhost:8080` — the globe loads immediately. Supabase auto-seeds on first request for database-driven layers.
 
 ---
 
@@ -508,25 +540,14 @@ graph TB
 
 ---
 
-## Features
+## License
 
-- 🌍 Interactive 3D tactical globe with animated canvas sprites, arcs, rings, and conflict zone polygons
-- 📡 12 data layers: combat, unrest, aviation, naval, satellite, cyber, nuclear, bases, infrastructure, data centers, oil sites, danger
-- 🗄️ Supabase (PostgreSQL) caching — data persists even when external APIs fail
-- 🤖 Multi-model AI SITREP briefings per category (Groq — 3 models by domain)
-- 🗺️ AI-identified conflict zone overlay (civil wars, insurgencies rendered as country polygons)
-- ✈️ AI-powered flight path prediction
-- ⚓ Live maritime tracking via Digitraffic AIS (SOG-filtered, recency-checked)
-- 🛡️ 99 military bases across 43 countries with Pentagon command link arcs
-- 🖥️ 55 AI/cloud data centers worldwide (database-driven, no API needed)
-- 🛢️ 56 global oil sites including strategic chokepoints (database-driven)
-- 🔌 Submarine cable & pipeline network with arc rendering (23 routes)
-- 📊 Auto-refreshing data (60s intervals via TanStack Query)
-- 🔒 Row Level Security on all Supabase tables
-- ⚡ Hot module reload in dev (Vite frontend + tsx API server)
+Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
 
 ---
 
-## License
+<div align="center">
 
-MIT
+Built with ☕ for **ICT241** — Alobin · 2026
+
+</div>
