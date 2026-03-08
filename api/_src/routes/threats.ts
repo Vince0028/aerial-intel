@@ -79,37 +79,41 @@ async function fetchAbuseIPDB(): Promise<IntelEvent[]> {
 
 router.get("/", async (_req: Request, res: Response) => {
     try {
+        // 1. Serve from mem-cache immediately (60min TTL)
         if (memCache && Date.now() - memCache.ts < MEM_TTL) {
             return res.json({ events: memCache.events, source: "AbuseIPDB (mem-cache)", count: memCache.events.length });
         }
 
+        // 2. Serve from Supabase cache immediately — don't wait for external API
+        const cached = await readCachedEvents(TABLE, 17);
+        if (cached && cached.events.length > 0) {
+            memCache = { events: cached.events, ts: Date.now() };
+            // Background refresh: update Supabase without blocking the response
+            fetchAbuseIPDB().then(async (raw) => {
+                const fresh = filterFreshEvents(raw, 17);
+                if (fresh.length === 0) return;
+                // Merge: preserve countries not in fresh batch
+                const newCCs = new Set(fresh.map(e => e.meta?.country as string));
+                const preserved = cached.events.filter(e => !newCCs.has(e.meta?.country as string));
+                const merged = [...fresh, ...preserved];
+                memCache = { events: merged, ts: Date.now() };
+                await upsertEvents(TABLE, merged, "AbuseIPDB");
+            }).catch(err => console.warn("[threats] background refresh failed:", err.message));
+            return res.json({ events: cached.events, source: cached.source, count: cached.events.length });
+        }
+
+        // 3. Supabase empty — first run, fetch directly and seed
         let events: IntelEvent[] = [];
-        let source = "AbuseIPDB";
+        const source = "AbuseIPDB";
         try {
             const raw = await fetchAbuseIPDB();
             events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
-                // Merge with existing cache: preserve countries not in current AbuseIPDB batch
-                // so countries that weren't flagged today don't disappear from the globe
-                const existing = await readCachedEvents(TABLE, 17);
-                if (existing && existing.events.length > 0) {
-                    const newCountryCodes = new Set(events.map(e => e.meta?.country as string));
-                    const preserved = existing.events.filter(e => !newCountryCodes.has(e.meta?.country as string));
-                    events = [...events, ...preserved];
-                }
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);
             }
         } catch (err: any) {
             console.warn(`[threats] AbuseIPDB fetch failed: ${err.message}`);
-        }
-
-        if (events.length === 0) {
-            const cached = await readCachedEvents(TABLE, 17);
-            if (cached && cached.events.length > 0) {
-                memCache = { events: cached.events, ts: Date.now() };
-                return res.json({ events: cached.events, source: cached.source, count: cached.events.length });
-            }
         }
 
         return res.json({ events, source, count: events.length });
