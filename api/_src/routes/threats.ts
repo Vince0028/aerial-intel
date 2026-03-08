@@ -89,6 +89,14 @@ router.get("/", async (_req: Request, res: Response) => {
             const raw = await fetchAbuseIPDB();
             events = filterFreshEvents(raw, 17);
             if (events.length > 0) {
+                // Merge with existing cache: preserve countries not in current AbuseIPDB batch
+                // so countries that weren't flagged today don't disappear from the globe
+                const existing = await readCachedEvents(TABLE, 17);
+                if (existing && existing.events.length > 0) {
+                    const newCountryCodes = new Set(events.map(e => e.meta?.country as string));
+                    const preserved = existing.events.filter(e => !newCountryCodes.has(e.meta?.country as string));
+                    events = [...events, ...preserved];
+                }
                 memCache = { events, ts: Date.now() };
                 await upsertEvents(TABLE, events, source);
             }
@@ -97,7 +105,7 @@ router.get("/", async (_req: Request, res: Response) => {
         }
 
         if (events.length === 0) {
-            const cached = await readCachedEvents(TABLE, 3);
+            const cached = await readCachedEvents(TABLE, 17);
             if (cached && cached.events.length > 0) {
                 memCache = { events: cached.events, ts: Date.now() };
                 return res.json({ events: cached.events, source: cached.source, count: cached.events.length });

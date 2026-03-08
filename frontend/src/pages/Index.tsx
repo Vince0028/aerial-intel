@@ -165,19 +165,19 @@ const Index = () => {
   // Build rings from combat, satellite, and cyber events
   const rings = useMemo(() => {
     const r: any[] = [];
-    const addRings = (source: any, color: string, maxR: number, speed: number, period: number) => {
-      if (!source?.events) return;
+    const addRings = (layer: LayerKey, source: any, color: string, maxR: number, speed: number, period: number) => {
+      if (!activeLayers.has(layer) || !source?.events) return;
       for (const evt of source.events) {
         r.push({ lat: evt.lat, lng: evt.lng, color, maxR, propagationSpeed: speed, repeatPeriod: period });
       }
     };
-    addRings(intel.conflicts, LAYER_COLORS.combat, 3, 2, 800);
-    addRings(intel.satellite, LAYER_COLORS.satellite, 2, 2, 600);
-    addRings(intel.cyber, LAYER_COLORS.cyber, 2.5, 2, 1000);
-    addRings(intel.seismic, LAYER_COLORS.seismic, 3.5, 2, 700);
-    addRings(intel.ioda, LAYER_COLORS.ioda, 2.5, 2, 900);
+    addRings('combat', intel.conflicts, LAYER_COLORS.combat, 3, 2, 800);
+    addRings('satellite', intel.satellite, LAYER_COLORS.satellite, 2, 2, 600);
+    addRings('cyber', intel.cyber, LAYER_COLORS.cyber, 2.5, 2, 1000);
+    addRings('seismic', intel.seismic, LAYER_COLORS.seismic, 3.5, 2, 700);
+    addRings('ioda', intel.ioda, LAYER_COLORS.ioda, 2.5, 2, 900);
     return r;
-  }, [intel]);
+  }, [intel, activeLayers]);
 
   // Dynamic arcs derived from real API data
   // 1. Naval: homeport → current position (deployment routes)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import Globe from 'react-globe.gl';
 import { LAYER_COLORS, type LayerKey } from '@/data/tacticalData';
 import { createCategorySprite } from './GlobeSprites';
@@ -133,6 +133,24 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
     [points, activeLayers]
   );
 
+  // Stabilize arcs: only update the globe's arc data when arc positions actually change.
+  // Prevents react-globe.gl from restarting all dash animations on every 60s data refetch.
+  const [stableArcs, setStableArcs] = useState<ArcRoute[]>(arcs);
+  const arcsKeyRef = useRef('');
+  const arcsKey = useMemo(
+    () => arcs.map(a =>
+      `${Math.round(a.startLat * 10)},${Math.round(a.startLng * 10)},` +
+      `${Math.round(a.endLat * 10)},${Math.round(a.endLng * 10)}`
+    ).sort().join('|'),
+    [arcs]
+  );
+  useEffect(() => {
+    if (arcsKey === arcsKeyRef.current) return;
+    arcsKeyRef.current = arcsKey;
+    const t = setTimeout(() => setStableArcs(arcs), 800);
+    return () => clearTimeout(t);
+  }, [arcsKey, arcs]);
+
   // Rich HTML label for objects
   const renderLabel = useCallback((d: object) => {
     const p = d as GlobePoint;
@@ -242,7 +260,7 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
         ringColor={(d: object) => (d as GlobeRing).color}
 
         // Arcs — deployment + comms routes
-        arcsData={arcs}
+        arcsData={stableArcs}
         arcStartLat="startLat"
         arcStartLng="startLng"
         arcEndLat="endLat"
