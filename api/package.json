@@ -4,8 +4,8 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
-        "dev": "tsx watch src/server.ts",
-        "start": "tsx src/server.ts",
+        "dev": "tsx watch _src/server.ts",
+        "start": "tsx _src/server.ts",
         "build": "tsc"
     },
     "dependencies": {
