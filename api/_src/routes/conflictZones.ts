@@ -17,7 +17,13 @@ let zoneCache: { zones: ConflictZone[]; ts: number } | null = null;
 const MEM_TTL = 60 * 60 * 1000;
 
 // Bump this whenever BASE_CONFLICT_ZONES changes -- forces Supabase re-seed on next request
-const ZONE_VERSION = "2026-03-08-v4";
+const ZONE_VERSION = "2026-03-08-v5";
+
+/**
+ * Countries explicitly excluded -- conflict is over / below threshold.
+ * Groq cannot re-add these even if GDELT has news about them.
+ */
+const EXCLUDED_ISOS = new Set(["PHL", "ZWE", "TZA"]);
 
 /**
  * HARDCODED base list -- all active wars and conflicts as of March 2026.
@@ -126,7 +132,7 @@ function eventsToZones(events: IntelEvent[]): ConflictZone[] {
  */
 function mergeWithBase(extras: ConflictZone[]): ConflictZone[] {
     const merged = new Map<string, ConflictZone>();
-    for (const z of extras) merged.set(z.iso, z);
+    for (const z of extras) if (!EXCLUDED_ISOS.has(z.iso)) merged.set(z.iso, z);
     for (const z of BASE_CONFLICT_ZONES) merged.set(z.iso, z); // base always wins
     return Array.from(merged.values()).sort((a, b) => b.severity - a.severity);
 }
@@ -157,6 +163,12 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
                 .map(([c, v]) => `${c} (${v.count} events): ${v.labels.join(" | ")}`)
                 .join("\n");
 
+            // All ISOs Groq must never add: BASE list + explicitly excluded
+            const groqBlocklist = [
+                ...BASE_CONFLICT_ZONES.map(z => z.iso),
+                ...Array.from(EXCLUDED_ISOS),
+            ].join(",");
+
             if (summary.length > 0) {
                 const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                     method: "POST",
@@ -165,7 +177,7 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
                         model: "llama-3.3-70b-versatile",
                         messages: [{
                             role: "user",
-                            content: `From this GDELT news data, identify any NEW countries with active armed conflict NOT already in this list: ${BASE_CONFLICT_ZONES.map(z => z.iso).join(",")}\n\nGDELT data:\n${summary}\n\nReturn ONLY a JSON array or empty [] if nothing new. Each item: {"country":"Full Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason","startedAt":"YYYY"}\nNO markdown, NO code fences.`,
+                            content: `From this GDELT news data, identify any NEW countries with active armed conflict NOT already in this list: ${groqBlocklist}\n\nGDELT data:\n${summary}\n\nReturn ONLY a JSON array or empty [] if nothing new. Each item: {"country":"Full Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason","startedAt":"YYYY"}\nNO markdown, NO code fences.`,
                         }],
                         temperature: 0,
                         max_tokens: 600,
@@ -179,8 +191,9 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
                     if (jsonMatch) {
                         const extras: ConflictZone[] = JSON.parse(jsonMatch[0]);
                         for (const z of extras) {
-                            if (z.country && z.iso?.length === 3 && !merged.has(z.iso.toUpperCase())) {
-                                merged.set(z.iso.toUpperCase(), {
+                            const isoUp = z.iso?.toUpperCase();
+                            if (z.country && isoUp?.length === 3 && !merged.has(isoUp) && !EXCLUDED_ISOS.has(isoUp)) {
+                                merged.set(isoUp, {
                                     country: z.country,
                                     iso: z.iso.toUpperCase(),
                                     severity: Math.min(10, Math.max(1, Math.round(z.severity))),
@@ -197,7 +210,9 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
         }
     }
 
-    return Array.from(merged.values()).sort((a, b) => b.severity - a.severity);
+    return Array.from(merged.values())
+        .filter(z => !EXCLUDED_ISOS.has(z.iso))
+        .sort((a, b) => b.severity - a.severity);
 }
 
 /**
