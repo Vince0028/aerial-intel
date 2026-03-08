@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { readCachedEvents } from "../dbCache.js";
 
 const router = Router();
 
@@ -36,12 +37,10 @@ router.get("/", async (req: Request, res: Response) => {
     }
 
     try {
-        // Fetch current conflict events from our own API
-        const conflictsUrl = `http://localhost:${process.env.PORT || 3001}/api/intel/conflicts`;
-        const conflictsRes = await fetch(conflictsUrl, { signal: AbortSignal.timeout(10000) });
-        if (!conflictsRes.ok) throw new Error("Could not fetch conflicts data");
-        const conflictsData = await conflictsRes.json() as any;
-        const events: any[] = conflictsData.events || [];
+        // Read conflict events directly from Supabase cache
+        // (avoids a localhost HTTP call that breaks in serverless environments)
+        const conflictsData = await readCachedEvents("conflicts");
+        const events: any[] = conflictsData?.events || [];
 
         if (events.length === 0) {
             zoneCache = { zones: [], ts: Date.now() };
