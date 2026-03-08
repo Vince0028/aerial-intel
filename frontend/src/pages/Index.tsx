@@ -85,6 +85,7 @@ const Index = () => {
           ISO_A3: zone.iso,
           severity: zone.severity,
           reason: zone.reason,
+          startedAt: zone.startedAt,
         },
         geometry: feature.geometry,
       });

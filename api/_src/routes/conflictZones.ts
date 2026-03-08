@@ -10,59 +10,63 @@ interface ConflictZone {
     iso: string;
     severity: number;
     reason: string;
+    startedAt?: string;   // "YYYY" or "YYYY-MM" or "YYYY-MM-DD" when conflict began
 }
 
 let zoneCache: { zones: ConflictZone[]; ts: number } | null = null;
 const MEM_TTL = 60 * 60 * 1000;
 
 // Bump this whenever BASE_CONFLICT_ZONES changes -- forces Supabase re-seed on next request
-const ZONE_VERSION = "2026-03-08-v2";
+const ZONE_VERSION = "2026-03-08-v3";
 
 /**
  * HARDCODED base list -- all active wars and conflicts as of March 2026.
  * These are ALWAYS present regardless of what is in Supabase.
+ * startedAt = when the current phase of conflict began (not necessarily the origin of the dispute).
  */
 const BASE_CONFLICT_ZONES: ConflictZone[] = [
     // Full-scale wars
-    { country: "Ukraine",                          iso: "UKR", severity: 10, reason: "Russia-Ukraine full-scale war" },
-    { country: "Russia",                           iso: "RUS", severity: 10, reason: "Active war -- Ukrainian strikes on Russian territory" },
-    { country: "Palestine",                        iso: "PSE", severity: 10, reason: "Israeli military operations in Gaza and West Bank" },
-    { country: "Sudan",                            iso: "SDN", severity: 9,  reason: "RSF vs SAF civil war -- mass civilian casualties" },
-    { country: "Yemen",                            iso: "YEM", severity: 9,  reason: "Houthi conflict -- US/Israeli airstrikes ongoing" },
-    { country: "Democratic Republic of the Congo", iso: "COD", severity: 8,  reason: "M23 rebel major offensive -- Goma captured 2025" },
-    { country: "Myanmar",                          iso: "MMR", severity: 8,  reason: "Military junta vs nationwide resistance forces" },
-    { country: "Haiti",                            iso: "HTI", severity: 8,  reason: "Gang warfare and state collapse" },
-    { country: "Israel",                           iso: "ISR", severity: 8,  reason: "Active military operations in Gaza, Lebanon, Syria" },
-    { country: "Burkina Faso",                     iso: "BFA", severity: 8,  reason: "JNIM jihadist insurgency -- mass displacement" },
+    { country: "Ukraine",                          iso: "UKR", severity: 10, reason: "Russia-Ukraine full-scale war",                                    startedAt: "2022-02-24" },
+    { country: "Russia",                           iso: "RUS", severity: 10, reason: "Active war -- Ukrainian strikes on Russian territory",              startedAt: "2022-02-24" },
+    { country: "Palestine",                        iso: "PSE", severity: 10, reason: "Israeli military operations in Gaza and West Bank",                 startedAt: "2023-10-07" },
+    { country: "Sudan",                            iso: "SDN", severity:  9, reason: "RSF vs SAF civil war -- mass civilian casualties",                  startedAt: "2023-04-15" },
+    { country: "Yemen",                            iso: "YEM", severity:  9, reason: "Houthi conflict -- US/Israeli airstrikes ongoing",                  startedAt: "2014-09" },
+    { country: "Democratic Republic of the Congo", iso: "COD", severity:  8, reason: "M23 rebel major offensive -- Goma captured 2025",                  startedAt: "2021-11" },
+    { country: "Myanmar",                          iso: "MMR", severity:  8, reason: "Military junta vs nationwide resistance forces",                    startedAt: "2021-02-01" },
+    { country: "Haiti",                            iso: "HTI", severity:  8, reason: "Gang warfare and state collapse",                                   startedAt: "2021-07" },
+    { country: "Israel",                           iso: "ISR", severity:  8, reason: "Active military operations in Gaza, Lebanon, Syria",                startedAt: "2023-10-07" },
+    { country: "Burkina Faso",                     iso: "BFA", severity:  8, reason: "JNIM jihadist insurgency -- mass displacement",                     startedAt: "2015" },
     // Major armed conflicts
-    { country: "Syria",                            iso: "SYR", severity: 7,  reason: "Post-Assad multi-faction armed conflict ongoing" },
-    { country: "Ethiopia",                         iso: "ETH", severity: 7,  reason: "Amhara and Oromo armed conflicts ongoing" },
-    { country: "Somalia",                          iso: "SOM", severity: 7,  reason: "Al-Shabaab jihadist insurgency" },
-    { country: "South Sudan",                      iso: "SSD", severity: 7,  reason: "Internal armed political conflict -- resumed 2025" },
-    { country: "Mali",                             iso: "MLI", severity: 7,  reason: "JNIM insurgency -- major territory lost to jihadists" },
+    { country: "Syria",                            iso: "SYR", severity:  7, reason: "Post-Assad multi-faction armed conflict ongoing",                   startedAt: "2011-03" },
+    { country: "Ethiopia",                         iso: "ETH", severity:  7, reason: "Amhara and Oromo armed conflicts ongoing",                          startedAt: "2020-11" },
+    { country: "Somalia",                          iso: "SOM", severity:  7, reason: "Al-Shabaab jihadist insurgency",                                    startedAt: "2006" },
+    { country: "South Sudan",                      iso: "SSD", severity:  7, reason: "Internal armed political conflict -- resumed 2025",                 startedAt: "2013" },
+    { country: "Mali",                             iso: "MLI", severity:  7, reason: "JNIM insurgency -- major territory lost to jihadists",              startedAt: "2012" },
     // Significant insurgencies / civil conflicts
-    { country: "Nigeria",                          iso: "NGA", severity: 6,  reason: "Boko Haram, ISWAP insurgency and banditry" },
-    { country: "Mozambique",                       iso: "MOZ", severity: 6,  reason: "ASWJ jihadist insurgency in Cabo Delgado" },
-    { country: "Central African Republic",         iso: "CAF", severity: 6,  reason: "CPC rebel coalition vs government armed conflict" },
-    { country: "Niger",                            iso: "NER", severity: 6,  reason: "JNIM insurgency and post-coup armed instability" },
-    { country: "Colombia",                         iso: "COL", severity: 6,  reason: "ELN and FARC dissident armed conflict ongoing" },
-    { country: "Lebanon",                          iso: "LBN", severity: 6,  reason: "Post-war armed incidents and Hezbollah remnants" },
-    { country: "Afghanistan",                      iso: "AFG", severity: 6,  reason: "TTP insurgency and Taliban internal armed conflict" },
-    { country: "Mexico",                           iso: "MEX", severity: 6,  reason: "Cartel war -- military-level armed conflict" },
-    { country: "Libya",                            iso: "LBY", severity: 6,  reason: "Rival militia faction armed conflict" },
+    { country: "Nigeria",                          iso: "NGA", severity:  6, reason: "Boko Haram, ISWAP insurgency and banditry",                         startedAt: "2009" },
+    { country: "Mozambique",                       iso: "MOZ", severity:  6, reason: "ASWJ jihadist insurgency in Cabo Delgado",                          startedAt: "2017-10" },
+    { country: "Central African Republic",         iso: "CAF", severity:  6, reason: "CPC rebel coalition vs government armed conflict",                  startedAt: "2012-12" },
+    { country: "Niger",                            iso: "NER", severity:  6, reason: "JNIM insurgency and post-coup armed instability",                   startedAt: "2023-07" },
+    { country: "Colombia",                         iso: "COL", severity:  6, reason: "ELN and FARC dissident armed conflict ongoing",                     startedAt: "1964" },
+    { country: "Lebanon",                          iso: "LBN", severity:  6, reason: "Post-war armed incidents and Hezbollah remnants",                   startedAt: "2023-10" },
+    { country: "Afghanistan",                      iso: "AFG", severity:  6, reason: "TTP insurgency and Taliban internal armed conflict",                startedAt: "2021-08" },
+    { country: "Mexico",                           iso: "MEX", severity:  6, reason: "Cartel war -- military-level armed conflict",                       startedAt: "2006" },
+    { country: "Libya",                            iso: "LBY", severity:  6, reason: "Rival militia faction armed conflict",                              startedAt: "2011" },
     // Ongoing lower-intensity conflicts
-    { country: "Iraq",                             iso: "IRQ", severity: 5,  reason: "ISIS remnant attacks and PMF operations" },
-    { country: "Pakistan",                         iso: "PAK", severity: 5,  reason: "TTP cross-border attacks, Baloch insurgency" },
-    { country: "Iran",                             iso: "IRN", severity: 5,  reason: "Israeli airstrikes, Baloch/Kurdish insurgency" },
-    { country: "Venezuela",                        iso: "VEN", severity: 5,  reason: "Tren de Aragua gang war and border armed conflict" },
-    { country: "North Korea",                      iso: "PRK", severity: 5,  reason: "Troops deployed to Russia, active military provocations" },
-    { country: "Chad",                             iso: "TCD", severity: 5,  reason: "Armed rebel groups and Sahel jihadist spillover" },
-    { country: "Cameroon",                         iso: "CMR", severity: 5,  reason: "Anglophone separatist armed conflict" },
-    { country: "Philippines",                      iso: "PHL", severity: 4,  reason: "NPA communist insurgency and Abu Sayyaf attacks" },
-    { country: "Uganda",                           iso: "UGA", severity: 4,  reason: "ADF insurgency near DRC border" },
-    { country: "Kenya",                            iso: "KEN", severity: 4,  reason: "Al-Shabaab cross-border attacks" },
-    { country: "Zimbabwe",                         iso: "ZWE", severity: 3,  reason: "Armed political violence and security crackdowns" },
-    { country: "Tanzania",                         iso: "TZA", severity: 3,  reason: "Jihadist spillover from Mozambique insurgency" },
+    { country: "Iraq",                             iso: "IRQ", severity:  5, reason: "ISIS remnant attacks and PMF operations",                           startedAt: "2019" },
+    { country: "Pakistan",                         iso: "PAK", severity:  5, reason: "TTP cross-border attacks, Baloch insurgency",                       startedAt: "2007" },
+    { country: "Iran",                             iso: "IRN", severity:  5, reason: "Israeli airstrikes, Baloch/Kurdish insurgency",                     startedAt: "2019" },
+    { country: "Venezuela",                        iso: "VEN", severity:  5, reason: "Tren de Aragua gang war and border armed conflict",                 startedAt: "2016" },
+    { country: "North Korea",                      iso: "PRK", severity:  5, reason: "Troops deployed to Russia, active military provocations",           startedAt: "2024-10" },
+    { country: "Chad",                             iso: "TCD", severity:  5, reason: "Armed rebel groups and Sahel jihadist spillover",                   startedAt: "2021" },
+    { country: "Cameroon",                         iso: "CMR", severity:  5, reason: "Anglophone separatist armed conflict",                              startedAt: "2016" },
+    // Low severity / residual
+    { country: "Uganda",                           iso: "UGA", severity:  4, reason: "ADF insurgency near DRC border",                                    startedAt: "1995" },
+    { country: "Kenya",                            iso: "KEN", severity:  4, reason: "Al-Shabaab cross-border attacks",                                   startedAt: "2011" },
+    { country: "Zimbabwe",                         iso: "ZWE", severity:  3, reason: "Armed political violence and security crackdowns",                  startedAt: "2000" },
+    { country: "Tanzania",                         iso: "TZA", severity:  3, reason: "Jihadist spillover from Mozambique insurgency",                     startedAt: "2022" },
+    // Philippines -- NPA in strategic collapse (<800 fighters), ASG largely dismantled as of 2026
+    { country: "Philippines",                      iso: "PHL", severity:  2, reason: "NPA in strategic collapse -- fewer than 800 fighters; ASG largely dismantled; residual localized violence only", startedAt: "1969" },
 ];
 
 const ISO_CENTROIDS: Record<string, [number, number]> = {
@@ -95,6 +99,7 @@ function zonesToEvents(zones: ConflictZone[]): IntelEvent[] {
                 iso: z.iso,
                 severity: z.severity,
                 reason: z.reason,
+                startedAt: z.startedAt ?? null,
                 isConflictZone: true,
                 zoneVersion: ZONE_VERSION,
             },
@@ -110,6 +115,7 @@ function eventsToZones(events: IntelEvent[]): ConflictZone[] {
             iso: String(e.meta?.iso ?? ""),
             severity: e.intensity,
             reason: String(e.meta?.reason ?? e.label),
+            startedAt: e.meta?.startedAt ? String(e.meta.startedAt) : undefined,
         }))
         .filter(z => z.iso.length === 3);
 }
@@ -159,7 +165,7 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
                         model: "llama-3.3-70b-versatile",
                         messages: [{
                             role: "user",
-                            content: `From this GDELT news data, identify any NEW countries with active armed conflict NOT already in this list: ${BASE_CONFLICT_ZONES.map(z => z.iso).join(",")}\n\nGDELT data:\n${summary}\n\nReturn ONLY a JSON array or empty [] if nothing new. Each item: {"country":"Full Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason"}\nNO markdown, NO code fences.`,
+                            content: `From this GDELT news data, identify any NEW countries with active armed conflict NOT already in this list: ${BASE_CONFLICT_ZONES.map(z => z.iso).join(",")}\n\nGDELT data:\n${summary}\n\nReturn ONLY a JSON array or empty [] if nothing new. Each item: {"country":"Full Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason","startedAt":"YYYY"}\nNO markdown, NO code fences.`,
                         }],
                         temperature: 0,
                         max_tokens: 600,
@@ -179,6 +185,7 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
                                     iso: z.iso.toUpperCase(),
                                     severity: Math.min(10, Math.max(1, Math.round(z.severity))),
                                     reason: (z.reason || "").slice(0, 120),
+                                    startedAt: z.startedAt ?? undefined,
                                 });
                             }
                         }

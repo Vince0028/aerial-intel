@@ -47,6 +47,7 @@ export interface ConflictZonePolygon {
     ISO_A3: string;
     severity: number;
     reason: string;
+    startedAt?: string;  // "YYYY" or "YYYY-MM" or "YYYY-MM-DD"
   };
   geometry: any;
 }
@@ -200,6 +201,21 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
     const feat = d as ConflictZonePolygon;
     const sev = feat.properties.severity;
     const sevColor = sev >= 8 ? '#FF2020' : sev >= 5 ? '#FF6600' : '#FFaa00';
+    const raw = feat.properties.startedAt;
+    let dateLabel = '';
+    if (raw) {
+      // Format: YYYY → "Since YYYY" | YYYY-MM → "Since Mon YYYY" | YYYY-MM-DD → "Since DD Mon YYYY"
+      const parts = raw.split('-');
+      if (parts.length === 1) {
+        dateLabel = `Since ${parts[0]}`;
+      } else if (parts.length === 2) {
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        dateLabel = `Since ${months[parseInt(parts[1], 10) - 1]} ${parts[0]}`;
+      } else {
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        dateLabel = `Since ${parseInt(parts[2], 10)} ${months[parseInt(parts[1], 10) - 1]} ${parts[0]}`;
+      }
+    }
     return `<div style="
       background: rgba(10, 0, 0, 0.92);
       border: 1px solid ${sevColor};
@@ -208,14 +224,15 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: #e0e0e0;
-      max-width: 260px;
+      max-width: 280px;
       line-height: 1.5;
       box-shadow: 0 0 24px ${sevColor}40;
       pointer-events: none;
     ">
       <div style="color: ${sevColor}; font-weight: 700; font-size: 13px; margin-bottom: 4px;">⚠️ CONFLICT ZONE</div>
       <div style="font-size: 12px; margin-bottom: 4px;">${feat.properties.ADMIN}</div>
-      <div style="color: #a0a0a0; font-size: 10px;">${feat.properties.reason}</div>
+      <div style="color: #a0a0a0; font-size: 10px; margin-bottom: 4px;">${feat.properties.reason}</div>
+      ${dateLabel ? `<div style="color: #888; font-size: 10px; margin-bottom: 2px;">🗓 ${dateLabel} &mdash; Active as of Mar 2026</div>` : ''}
       <div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid ${sevColor}30; font-size: 10px; color: ${sevColor};">THREAT LEVEL: ${sev}/10</div>
     </div>`;
   }, []);

@@ -305,6 +305,7 @@ export interface ConflictZone {
     iso: string;
     severity: number;
     reason: string;
+    startedAt?: string;  // "YYYY", "YYYY-MM", or "YYYY-MM-DD"
 }
 
 export function useConflictZones() {
