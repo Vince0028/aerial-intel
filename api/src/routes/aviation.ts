@@ -7,28 +7,42 @@ const router = Router();
 
 /**
  * GET /api/intel/aviation
- * 1. Fetch from OpenSky Network → upsert to Supabase
+ * 1. Fetch from OpenSky Network (authenticated for higher rate limits) → upsert to Supabase
  * 2. On failure → serve from Supabase cache
  *
- * Uses anonymous access (no auth) which has a lower rate limit
- * but avoids credential issues. Limits to a bounding box to
- * reduce response size and avoid timeouts.
+ * Authenticated users get 100 API credits/day vs 10 for anonymous.
+ * Covers multiple AORs: Pacific, Middle East, Europe, Atlantic.
  */
 router.get("/", async (_req: Request, res: Response) => {
     try {
-        // Bounding box covering Europe + Middle East + North Africa for manageable data size
-        const url = "https://opensky-network.org/api/states/all?lamin=10&lomin=-30&lamax=60&lomax=70";
+        // Wider bounding box — Pacific + Indian Ocean + Middle East + Europe
+        const url = "https://opensky-network.org/api/states/all?lamin=-10&lomin=-30&lamax=65&lomax=150";
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
 
-        const response = await fetch(url, { signal: controller.signal });
+        // Use credentials if available (10x more API credits)
+        const user = process.env.OPENSKY_USERNAME;
+        const pass = process.env.OPENSKY_PASSWORD;
+        const headers: Record<string, string> = {};
+        if (user && pass) {
+            headers["Authorization"] = "Basic " + Buffer.from(`${user}:${pass}`).toString("base64");
+        }
+
+        let response = await fetch(url, { signal: controller.signal, headers });
+
+        // If auth rejected, retry anonymously
+        if (response.status === 401 && user) {
+            console.warn("[aviation] OpenSky auth 401 — retrying anonymously");
+            response = await fetch(url, { signal: controller.signal });
+        }
+
         clearTimeout(timeout);
 
         if (!response.ok) throw new Error(`OpenSky responded ${response.status}`);
 
         const data = await response.json() as any;
-        const states: any[] = (data.states || []).slice(0, 80);
+        const states: any[] = (data.states || []).slice(0, 150);
 
         const events: IntelEvent[] = states
             .filter((s: any) => s[5] != null && s[6] != null)
@@ -54,10 +68,14 @@ router.get("/", async (_req: Request, res: Response) => {
                 },
             }));
 
-        // Cache to Supabase
-        upsertEvents(TABLE, events, "OpenSky Network").catch(() => {});
+        const sourceLabel = (user && pass && response.status !== 401)
+            ? "OpenSky Network (authenticated)"
+            : "OpenSky Network";
 
-        res.json({ events, source: "OpenSky Network", count: events.length, timestamp: data.time });
+        // Cache to Supabase
+        upsertEvents(TABLE, events, sourceLabel).catch(() => {});
+
+        res.json({ events, source: sourceLabel, count: events.length, timestamp: data.time });
     } catch (err: any) {
         console.error("[aviation]", err.message);
 

@@ -19,6 +19,17 @@ import navalRoute from "./routes/naval.js";
 import basesRoute from "./routes/bases.js";
 import predictRoute from "./routes/predict.js";
 import conflictZonesRoute from "./routes/conflictZones.js";
+import summarizeRoute from "./routes/summarize.js";
+import infrastructureRoute from "./routes/infrastructure.js";
+import datacentersRoute from "./routes/datacenters.js";
+import oilsitesRoute from "./routes/oilsites.js";
+import seismicRoute from "./routes/seismic.js";
+import weatherRoute from "./routes/weather.js";
+import launchesRoute from "./routes/launches.js";
+import cvesRoute from "./routes/cves.js";
+import iodaRoute from "./routes/ioda.js";
+import ooniRoute from "./routes/ooni.js";
+import threatsRoute from "./routes/threats.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +55,17 @@ app.get("/api/health", (_req, res) => {
             "/api/intel/bases",
             "/api/intel/predict",
             "/api/intel/conflict-zones",
+            "/api/intel/summarize",
+            "/api/intel/infrastructure",
+            "/api/intel/datacenters",
+            "/api/intel/oilsites",
+            "/api/intel/seismic",
+            "/api/intel/weather",
+            "/api/intel/launches",
+            "/api/intel/cves",
+            "/api/intel/ioda",
+            "/api/intel/ooni",
+            "/api/intel/threats",
         ],
     });
 });
@@ -59,6 +81,17 @@ app.use("/api/intel/naval", navalRoute);
 app.use("/api/intel/bases", basesRoute);
 app.use("/api/intel/predict", predictRoute);
 app.use("/api/intel/conflict-zones", conflictZonesRoute);
+app.use("/api/intel/summarize", summarizeRoute);
+app.use("/api/intel/infrastructure", infrastructureRoute);
+app.use("/api/intel/datacenters", datacentersRoute);
+app.use("/api/intel/oilsites", oilsitesRoute);
+app.use("/api/intel/seismic", seismicRoute);
+app.use("/api/intel/weather", weatherRoute);
+app.use("/api/intel/launches", launchesRoute);
+app.use("/api/intel/cves", cvesRoute);
+app.use("/api/intel/ioda", iodaRoute);
+app.use("/api/intel/ooni", ooniRoute);
+app.use("/api/intel/threats", threatsRoute);
 
 // Start server
 app.listen(PORT, () => {

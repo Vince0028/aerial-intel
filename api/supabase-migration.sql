@@ -158,3 +158,185 @@ CREATE INDEX IF NOT EXISTS idx_cyber_fetched ON cyber (fetched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_nuclear_fetched ON nuclear (fetched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_naval_fetched ON naval (fetched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_bases_fetched ON bases (fetched_at DESC);
+
+-- 9. DATACENTERS (AI / Cloud data centers worldwide)
+CREATE TABLE IF NOT EXISTS datacenters (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'DATACENTER',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#A855F7',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'OSINT',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 10. OILSITES (Oil fields, refineries, terminals, platforms)
+CREATE TABLE IF NOT EXISTS oilsites (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'OILSITE',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#F59E0B',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'OSINT',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE datacenters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE oilsites ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anon_full_access" ON datacenters FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_full_access" ON oilsites FOR ALL TO anon USING (true) WITH CHECK (true);
+
+CREATE INDEX IF NOT EXISTS idx_datacenters_fetched ON datacenters (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_oilsites_fetched ON oilsites (fetched_at DESC);
+
+-- 11. SEISMIC (USGS Earthquakes)
+CREATE TABLE IF NOT EXISTS seismic (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'SEISMIC',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#FF6347',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'USGS',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 12. WEATHER (NASA EONET natural hazards)
+CREATE TABLE IF NOT EXISTS weather (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'WEATHER',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#00CED1',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'NASA EONET',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 13. LAUNCHES (Launch Library 2)
+CREATE TABLE IF NOT EXISTS launches (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'LAUNCH',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#FF4500',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'Launch Library 2',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 14. CVES (NIST NVD critical vulnerabilities)
+CREATE TABLE IF NOT EXISTS cves (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'CVE',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#E11D48',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'NIST NVD',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 15. IODA (Internet outage detection)
+CREATE TABLE IF NOT EXISTS ioda (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'IODA',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#DC2626',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'IODA',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 16. OONI (Internet censorship monitoring)
+CREATE TABLE IF NOT EXISTS ooni (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'OONI',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#8B5CF6',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'OONI',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 17. THREATS (AbuseIPDB threat intelligence)
+CREATE TABLE IF NOT EXISTS threats (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL DEFAULT 'THREAT',
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    intensity INTEGER NOT NULL DEFAULT 5,
+    label TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#EF4444',
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT now(),
+    meta JSONB DEFAULT '{}',
+    source TEXT NOT NULL DEFAULT 'AbuseIPDB',
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE seismic ENABLE ROW LEVEL SECURITY;
+ALTER TABLE weather ENABLE ROW LEVEL SECURITY;
+ALTER TABLE launches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cves ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ioda ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ooni ENABLE ROW LEVEL SECURITY;
+ALTER TABLE threats ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "anon_full_access" ON seismic FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_full_access" ON weather FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_full_access" ON launches FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_full_access" ON cves FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_full_access" ON ioda FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_full_access" ON ooni FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE POLICY "anon_full_access" ON threats FOR ALL TO anon USING (true) WITH CHECK (true);
+
+CREATE INDEX IF NOT EXISTS idx_seismic_fetched ON seismic (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_weather_fetched ON weather (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_launches_fetched ON launches (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cves_fetched ON cves (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ioda_fetched ON ioda (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ooni_fetched ON ooni (fetched_at DESC);
+CREATE INDEX IF NOT EXISTS idx_threats_fetched ON threats (fetched_at DESC);
+
+-- ============================================================
+-- AI Summaries — Groq-generated SITREP per intel category
+-- Cached here to avoid rate-limiting (TTL enforced by app: 30 min)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ai_summaries (
+    category TEXT PRIMARY KEY,          -- COMBAT | UNREST | AVIATION | etc.
+    summary TEXT NOT NULL,
+    model_used TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE ai_summaries ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_full_access" ON ai_summaries FOR ALL TO anon USING (true) WITH CHECK (true);

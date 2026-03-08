@@ -9,7 +9,17 @@ export type EventType =
     | "SATELLITE"
     | "CYBER"
     | "NUCLEAR"
-    | "BASE";
+    | "BASE"
+    | "INFRASTRUCTURE"
+    | "DATACENTER"
+    | "OILSITE"
+    | "SEISMIC"
+    | "CVE"
+    | "WEATHER"
+    | "LAUNCH"
+    | "IODA"
+    | "OONI"
+    | "THREAT";
 
 export interface IntelEvent {
     id: string;
@@ -34,4 +44,14 @@ export const LAYER_COLORS: Record<EventType, string> = {
     CYBER: "#FF1493",
     NUCLEAR: "#39FF14",
     BASE: "#FFFFFF",
+    INFRASTRUCTURE: "#00BFFF",
+    DATACENTER: "#A855F7",
+    OILSITE: "#F59E0B",
+    SEISMIC: "#FF6347",
+    CVE: "#E11D48",
+    WEATHER: "#00CED1",
+    LAUNCH: "#FF4500",
+    IODA: "#DC2626",
+    OONI: "#8B5CF6",
+    THREAT: "#EF4444",
 };

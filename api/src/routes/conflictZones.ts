@@ -66,21 +66,49 @@ router.get("/", async (req: Request, res: Response) => {
             .map(([c, v]) => `${c} (${v.count} events): ${v.labels.join(" | ")}`)
             .join("\n");
 
-        const prompt = `You are a military intelligence analyst for a global C2 system. Based on the following REAL conflict event data scraped today from GDELT news, identify countries that are ACTIVE CONFLICT ZONES or BATTLEFIELDS right now.
+        const prompt = `You are a military intelligence analyst for a global C2 system. Based on the following REAL conflict event data scraped today from GDELT news, identify countries that are ACTIVE CONFLICT ZONES right now.
+
+Include ALL types of armed conflict:
+- International wars (country vs country)
+- Civil wars (government vs armed groups within same country)
+- Insurgencies and armed rebellions
+- State collapse / warlord conflicts
+- Major terrorist insurgencies (e.g. ISIS, Al-Shabaab, Boko Haram)
+- Ethnic / sectarian armed conflict
+- Drug cartel wars with military involvement
 
 Current conflict events by country:
 ${summary}
 
+Also include these known ongoing wars/civil wars/conflicts even if not in the data above:
+- Ukraine (Russia-Ukraine war)
+- Palestine (Gaza conflict / Israeli military operations)
+- Sudan (RSF vs SAF civil war)
+- Myanmar (military junta vs resistance forces)
+- Ethiopia (multiple armed group conflicts)
+- Somalia (Al-Shabaab insurgency)
+- DR Congo (M23, ADF armed groups)
+- Yemen (Houthi conflict)
+- Syria (multi-faction civil war)
+- Haiti (gang warfare / state collapse)
+- Burkina Faso (jihadist insurgency)
+- Mali (jihadist insurgency)
+- Nigeria (Boko Haram / banditry)
+- South Sudan (internal armed conflict)
+- Libya (militia factions)
+- Mozambique (ASWJ insurgency)
+- Colombia (ELN / FARC remnants)
+
 Return ONLY a JSON array. Each item: {"country":"Full Country Name","iso":"ISO_A3_CODE","severity":1-10,"reason":"brief reason"}
 
 Rules:
-- severity 8-10: active war / major military operations (e.g. Ukraine, Gaza)
-- severity 5-7: significant armed conflict / insurgency
+- severity 8-10: active war / major military operations (e.g. Ukraine-Russia, Sudan civil war, Gaza)
+- severity 5-7: significant armed conflict / insurgency / civil war
 - severity 3-4: elevated tensions / border clashes / terrorism
 - Only include countries with REAL ongoing conflicts, NOT just news coverage
 - Use common English country names that match GeoJSON (e.g. "Ukraine" not "Ukr")
-- ISO codes must be 3-letter (UKR, ISR, SYR, etc.)
-- Return between 5-15 countries maximum
+- ISO codes must be 3-letter (UKR, ISR, SYR, SDN, MMR, etc.)
+- Return between 10-25 countries maximum
 - NO markdown, NO code fences, ONLY the JSON array`;
 
         const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -93,7 +121,7 @@ Rules:
                 model: "llama-3.3-70b-versatile",
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.2,
-                max_tokens: 800,
+                max_tokens: 1200,
             }),
         });
 

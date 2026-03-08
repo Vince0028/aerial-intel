@@ -32,9 +32,13 @@ export default function HudOverlay() {
           <div className="w-4 h-0.5" style={{ background: '#39FF14' }} />
           <span className="text-[#39FF14]">Supply / Logistics</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-1">
           <div className="w-4 h-0.5" style={{ background: '#00D2FF' }} />
           <span className="text-[#00D2FF]">Intel / Comms Link</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-0.5" style={{ background: '#F59E0B' }} />
+          <span className="text-[#F59E0B]">Pipeline</span>
         </div>
       </div>
     </>

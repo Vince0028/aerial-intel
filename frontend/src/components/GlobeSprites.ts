@@ -179,6 +179,246 @@ function drawIcon(ctx: CanvasRenderingContext2D, category: LayerKey, color: stri
             ctx.stroke();
             break;
         }
+        case 'infrastructure': {
+            // Cable/connector icon — plug symbol
+            ctx.lineWidth = 2.5;
+            // Horizontal cable line
+            ctx.beginPath();
+            ctx.moveTo(8, cy);
+            ctx.lineTo(22, cy);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(42, cy);
+            ctx.lineTo(56, cy);
+            ctx.stroke();
+            // Center connector box
+            ctx.strokeRect(22, cy - 8, 20, 16);
+            // Signal dots
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.arc(28, cy, 2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(36, cy, 2, 0, Math.PI * 2); ctx.fill();
+            // Waves underneath
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(12, cy + 14);
+            ctx.quadraticCurveTo(22, cy + 8, 32, cy + 14);
+            ctx.quadraticCurveTo(42, cy + 20, 52, cy + 14);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            break;
+        }
+        case 'datacenter': {
+            // Server rack icon
+            ctx.lineWidth = 2;
+            // Outer rack box
+            ctx.strokeRect(16, 8, 32, 48);
+            // Server slots
+            ctx.fillRect(20, 14, 24, 6);
+            ctx.fillRect(20, 24, 24, 6);
+            ctx.fillRect(20, 34, 24, 6);
+            // Status LEDs (small circles)
+            ctx.fillStyle = '#00FF00';
+            ctx.beginPath(); ctx.arc(40, 17, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(40, 27, 1.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(40, 37, 1.5, 0, Math.PI * 2); ctx.fill();
+            // AI brain network on bottom
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath(); ctx.arc(cx, 48, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(cx - 8, 52, 2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(cx + 8, 52, 2, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(cx, 48); ctx.lineTo(cx - 8, 52); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx, 48); ctx.lineTo(cx + 8, 52); ctx.stroke();
+            ctx.globalAlpha = 1;
+            break;
+        }
+        case 'oilsite': {
+            // Oil derrick / pump jack icon
+            ctx.lineWidth = 2.5;
+            // Derrick triangle
+            ctx.beginPath();
+            ctx.moveTo(cx, 6);
+            ctx.lineTo(cx + 14, 40);
+            ctx.lineTo(cx - 14, 40);
+            ctx.closePath();
+            ctx.stroke();
+            // Cross beams
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(cx - 7, 23); ctx.lineTo(cx + 7, 23); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx - 10, 32); ctx.lineTo(cx + 10, 32); ctx.stroke();
+            // Base platform
+            ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(cx - 18, 40); ctx.lineTo(cx + 18, 40); ctx.stroke();
+            // Oil droplet below
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(cx, 46);
+            ctx.quadraticCurveTo(cx + 6, 52, cx, 56);
+            ctx.quadraticCurveTo(cx - 6, 52, cx, 46);
+            ctx.fill();
+            break;
+        }
+        case 'seismic': {
+            // Seismograph wave (Activity icon)
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(8, cy);
+            ctx.lineTo(18, cy);
+            ctx.lineTo(22, cy - 14);
+            ctx.lineTo(26, cy + 16);
+            ctx.lineTo(30, cy - 18);
+            ctx.lineTo(34, cy + 12);
+            ctx.lineTo(38, cy - 6);
+            ctx.lineTo(42, cy);
+            ctx.lineTo(56, cy);
+            ctx.stroke();
+            break;
+        }
+        case 'cve': {
+            // Bug icon
+            ctx.lineWidth = 2;
+            // Body oval
+            ctx.beginPath();
+            ctx.ellipse(cx, cy + 4, 10, 14, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            // Head
+            ctx.beginPath();
+            ctx.arc(cx, cy - 14, 6, 0, Math.PI * 2);
+            ctx.stroke();
+            // Legs (3 pairs)
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cx - 10, cy - 4); ctx.lineTo(cx - 20, cy - 10);
+            ctx.moveTo(cx + 10, cy - 4); ctx.lineTo(cx + 20, cy - 10);
+            ctx.moveTo(cx - 10, cy + 4); ctx.lineTo(cx - 20, cy + 4);
+            ctx.moveTo(cx + 10, cy + 4); ctx.lineTo(cx + 20, cy + 4);
+            ctx.moveTo(cx - 10, cy + 12); ctx.lineTo(cx - 20, cy + 18);
+            ctx.moveTo(cx + 10, cy + 12); ctx.lineTo(cx + 20, cy + 18);
+            ctx.stroke();
+            // Antennae
+            ctx.beginPath();
+            ctx.moveTo(cx - 4, cy - 18); ctx.lineTo(cx - 10, cy - 26);
+            ctx.moveTo(cx + 4, cy - 18); ctx.lineTo(cx + 10, cy - 26);
+            ctx.stroke();
+            break;
+        }
+        case 'weather': {
+            // Cloud with lightning bolt
+            ctx.lineWidth = 2.5;
+            // Cloud
+            ctx.beginPath();
+            ctx.arc(cx - 6, 22, 10, Math.PI, Math.PI * 1.85);
+            ctx.arc(cx + 2, 16, 10, Math.PI * 1.2, Math.PI * 1.9);
+            ctx.arc(cx + 12, 22, 8, Math.PI * 1.3, Math.PI * 0.3);
+            ctx.lineTo(cx + 18, 28);
+            ctx.lineTo(cx - 16, 28);
+            ctx.closePath();
+            ctx.stroke();
+            // Lightning bolt
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(cx + 2, 30);
+            ctx.lineTo(cx - 4, 42);
+            ctx.lineTo(cx + 2, 40);
+            ctx.lineTo(cx - 2, 54);
+            ctx.lineTo(cx + 6, 40);
+            ctx.lineTo(cx, 42);
+            ctx.lineTo(cx + 6, 30);
+            ctx.closePath();
+            ctx.fill();
+            break;
+        }
+        case 'launch': {
+            // Rocket
+            ctx.lineWidth = 2;
+            // Nose cone
+            ctx.beginPath();
+            ctx.moveTo(cx, 4);
+            ctx.quadraticCurveTo(cx + 8, 14, cx + 8, 24);
+            ctx.lineTo(cx - 8, 24);
+            ctx.quadraticCurveTo(cx - 8, 14, cx, 4);
+            ctx.closePath();
+            ctx.fill();
+            // Body
+            ctx.fillRect(cx - 8, 24, 16, 20);
+            // Fins
+            ctx.beginPath();
+            ctx.moveTo(cx - 8, 36); ctx.lineTo(cx - 16, 48); ctx.lineTo(cx - 8, 44);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(cx + 8, 36); ctx.lineTo(cx + 16, 48); ctx.lineTo(cx + 8, 44);
+            ctx.fill();
+            // Flame
+            ctx.fillStyle = '#FF4500';
+            ctx.beginPath();
+            ctx.moveTo(cx - 5, 44);
+            ctx.quadraticCurveTo(cx, 58, cx + 5, 44);
+            ctx.fill();
+            break;
+        }
+        case 'ioda': {
+            // WiFi-off icon (signal with X)
+            ctx.lineWidth = 2.5;
+            // Signal arcs
+            ctx.beginPath(); ctx.arc(cx, cy + 10, 22, -Math.PI * 0.75, -Math.PI * 0.25); ctx.stroke();
+            ctx.beginPath(); ctx.arc(cx, cy + 10, 15, -Math.PI * 0.7, -Math.PI * 0.3); ctx.stroke();
+            ctx.beginPath(); ctx.arc(cx, cy + 10, 8, -Math.PI * 0.65, -Math.PI * 0.35); ctx.stroke();
+            // Dot
+            ctx.beginPath(); ctx.arc(cx, cy + 10, 3, 0, Math.PI * 2); ctx.fill();
+            // X slash
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx - 12, cy - 12); ctx.lineTo(cx + 12, cy + 12);
+            ctx.moveTo(cx + 12, cy - 12); ctx.lineTo(cx - 12, cy + 12);
+            ctx.stroke();
+            break;
+        }
+        case 'ooni': {
+            // Eye-off icon (censorship)
+            ctx.lineWidth = 2.5;
+            // Eye shape
+            ctx.beginPath();
+            ctx.moveTo(6, cy);
+            ctx.quadraticCurveTo(cx, cy - 16, 58, cy);
+            ctx.quadraticCurveTo(cx, cy + 16, 6, cy);
+            ctx.stroke();
+            // Pupil
+            ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+            // Slash through
+            ctx.strokeStyle = '#FF0000';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(10, 52); ctx.lineTo(54, 12);
+            ctx.stroke();
+            break;
+        }
+        case 'threat': {
+            // Shield with alert (exclamation)
+            ctx.lineWidth = 2;
+            // Shield outline
+            ctx.beginPath();
+            ctx.moveTo(cx, 6);
+            ctx.lineTo(cx + 20, 14);
+            ctx.lineTo(cx + 20, 32);
+            ctx.quadraticCurveTo(cx + 20, 50, cx, 58);
+            ctx.quadraticCurveTo(cx - 20, 50, cx - 20, 32);
+            ctx.lineTo(cx - 20, 14);
+            ctx.closePath();
+            ctx.stroke();
+            // Exclamation mark
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(cx, 20); ctx.lineTo(cx, 38);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(cx, 46, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+        }
     }
 }
 

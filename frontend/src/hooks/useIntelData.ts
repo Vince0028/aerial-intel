@@ -97,6 +97,116 @@ export function useBases() {
     });
 }
 
+export interface InfrastructureResponse extends ApiResponse {
+    routes?: {
+        id: string;
+        name: string;
+        startLat: number;
+        startLng: number;
+        endLat: number;
+        endLng: number;
+        type: 'cable' | 'pipeline';
+        capacity?: string;
+        status: string;
+    }[];
+}
+
+const EMPTY_INFRA_RESPONSE: InfrastructureResponse = { events: [], source: 'No data', count: 0, routes: [] };
+
+export function useInfrastructure() {
+    return useQuery({
+        queryKey: ['intel', 'infrastructure'],
+        queryFn: async (): Promise<InfrastructureResponse> => {
+            const res = await fetch(`${API_BASE}/infrastructure`);
+            if (!res.ok) throw new Error(`API infrastructure returned ${res.status}`);
+            return res.json();
+        },
+        refetchInterval: REFETCH_INTERVAL * 30, // cables/pipes don't move
+        retry: 2,
+    });
+}
+
+export function useDatacenters() {
+    return useQuery({
+        queryKey: ['intel', 'datacenters'],
+        queryFn: () => fetchIntel('datacenters'),
+        refetchInterval: REFETCH_INTERVAL * 30, // data centers don't move
+        retry: 2,
+    });
+}
+
+export function useOilsites() {
+    return useQuery({
+        queryKey: ['intel', 'oilsites'],
+        queryFn: () => fetchIntel('oilsites'),
+        refetchInterval: REFETCH_INTERVAL * 30, // oil sites don't move
+        retry: 2,
+    });
+}
+
+export function useSeismic() {
+    return useQuery({
+        queryKey: ['intel', 'seismic'],
+        queryFn: () => fetchIntel('seismic'),
+        refetchInterval: REFETCH_INTERVAL * 5, // every 5 min
+        retry: 2,
+    });
+}
+
+export function useWeather() {
+    return useQuery({
+        queryKey: ['intel', 'weather'],
+        queryFn: () => fetchIntel('weather'),
+        refetchInterval: REFETCH_INTERVAL * 10,
+        retry: 2,
+    });
+}
+
+export function useLaunches() {
+    return useQuery({
+        queryKey: ['intel', 'launches'],
+        queryFn: () => fetchIntel('launches'),
+        refetchInterval: REFETCH_INTERVAL * 10,
+        retry: 2,
+    });
+}
+
+export function useCves() {
+    return useQuery({
+        queryKey: ['intel', 'cves'],
+        queryFn: () => fetchIntel('cves'),
+        refetchInterval: REFETCH_INTERVAL * 15,
+        retry: 2,
+    });
+}
+
+export function useIoda() {
+    return useQuery({
+        queryKey: ['intel', 'ioda'],
+        queryFn: () => fetchIntel('ioda'),
+        refetchInterval: REFETCH_INTERVAL * 5,
+        retry: 2,
+    });
+}
+
+export function useOoni() {
+    return useQuery({
+        queryKey: ['intel', 'ooni'],
+        queryFn: () => fetchIntel('ooni'),
+        refetchInterval: REFETCH_INTERVAL * 15,
+        retry: 2,
+    });
+}
+
+export function useThreats() {
+    return useQuery({
+        queryKey: ['intel', 'threats'],
+        queryFn: () => fetchIntel('threats'),
+        refetchInterval: REFETCH_INTERVAL * 30,
+        retry: 2,
+    });
+}
+
 // ——— Combined hook that returns all data ———
 
 export interface AllIntelData {
@@ -108,6 +218,16 @@ export interface AllIntelData {
     nuclear: ApiResponse;
     naval: ApiResponse;
     bases: ApiResponse;
+    infrastructure: InfrastructureResponse;
+    datacenters: ApiResponse;
+    oilsites: ApiResponse;
+    seismic: ApiResponse;
+    weather: ApiResponse;
+    launches: ApiResponse;
+    cves: ApiResponse;
+    ioda: ApiResponse;
+    ooni: ApiResponse;
+    threats: ApiResponse;
     isLoading: boolean;
     isLive: boolean;
 }
@@ -121,8 +241,18 @@ export function useAllIntelData(): AllIntelData {
     const nuclear = useNuclear();
     const naval = useNaval();
     const bases = useBases();
+    const infrastructure = useInfrastructure();
+    const datacenters = useDatacenters();
+    const oilsites = useOilsites();
+    const seismic = useSeismic();
+    const weather = useWeather();
+    const launches = useLaunches();
+    const cves = useCves();
+    const ioda = useIoda();
+    const ooni = useOoni();
+    const threats = useThreats();
 
-    const queries = [conflicts, unrest, aviation, satellite, cyber, nuclear, naval, bases];
+    const queries = [conflicts, unrest, aviation, satellite, cyber, nuclear, naval, bases, infrastructure, datacenters, oilsites, seismic, weather, launches, cves, ioda, ooni, threats];
     const isLoading = queries.some(q => q.isLoading);
     const isLive = queries.some(q => q.isSuccess && (q.data?.events?.length ?? 0) > 0);
 
@@ -135,6 +265,16 @@ export function useAllIntelData(): AllIntelData {
         nuclear: nuclear.data ?? EMPTY_RESPONSE,
         naval: naval.data ?? EMPTY_RESPONSE,
         bases: bases.data ?? EMPTY_RESPONSE,
+        infrastructure: (infrastructure.data ?? EMPTY_INFRA_RESPONSE) as InfrastructureResponse,
+        datacenters: datacenters.data ?? EMPTY_RESPONSE,
+        oilsites: oilsites.data ?? EMPTY_RESPONSE,
+        seismic: seismic.data ?? EMPTY_RESPONSE,
+        weather: weather.data ?? EMPTY_RESPONSE,
+        launches: launches.data ?? EMPTY_RESPONSE,
+        cves: cves.data ?? EMPTY_RESPONSE,
+        ioda: ioda.data ?? EMPTY_RESPONSE,
+        ooni: ooni.data ?? EMPTY_RESPONSE,
+        threats: threats.data ?? EMPTY_RESPONSE,
         isLoading,
         isLive,
     };
@@ -176,6 +316,38 @@ export function useConflictZones() {
             return res.json();
         },
         refetchInterval: REFETCH_INTERVAL * 10, // every 10 min — AI analysis doesn't change fast
+        retry: 1,
+    });
+}
+
+// ——— Groq AI Category Briefing (multi-model, Supabase cached) ———
+export interface BriefingEvent {
+    label: string;
+    type: string;
+    intensity: number;
+}
+
+export interface CategoryBriefing {
+    summary: string;
+    model: string;
+    category: string;
+    source: string;
+}
+
+export function useCategorySummary(category: string, events: BriefingEvent[], enabled: boolean) {
+    return useQuery({
+        queryKey: ['intel', 'summary', category],
+        queryFn: async (): Promise<CategoryBriefing> => {
+            const res = await fetch('/api/intel/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category, events }),
+            });
+            if (!res.ok) throw new Error(`summarize returned ${res.status}`);
+            return res.json();
+        },
+        enabled: enabled && events.length > 0,
+        staleTime: 30 * 60 * 1000, // 30 min — matches server Supabase cache TTL
         retry: 1,
     });
 }

@@ -1,4 +1,4 @@
-import { LAYER_COLORS, LAYER_LABELS, type LayerKey } from '@/data/tacticalData';
+import { LAYER_COLORS, LAYER_LABELS, LAYER_ICONS, type LayerKey } from '@/data/tacticalData';
 
 interface LayerLegendProps {
   activeLayers: Set<LayerKey>;
@@ -14,6 +14,7 @@ export default function LayerLegend({ activeLayers, onToggle }: LayerLegendProps
       <div className="grid grid-cols-3 gap-1">
         {layers.map(layer => {
           const active = activeLayers.has(layer);
+          const Icon = LAYER_ICONS[layer];
           return (
             <button
               key={layer}
@@ -22,9 +23,10 @@ export default function LayerLegend({ activeLayers, onToggle }: LayerLegendProps
                 active ? 'bg-secondary/50' : 'opacity-30 hover:opacity-60'
               }`}
             >
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ backgroundColor: LAYER_COLORS[layer], boxShadow: active ? `0 0 6px ${LAYER_COLORS[layer]}80` : 'none' }}
+              <Icon
+                size={10}
+                className="shrink-0"
+                style={{ color: active ? LAYER_COLORS[layer] : undefined }}
               />
               <span className="truncate" style={{ color: active ? LAYER_COLORS[layer] : undefined }}>
                 {LAYER_LABELS[layer]}

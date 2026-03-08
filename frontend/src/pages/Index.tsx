@@ -8,13 +8,16 @@ import LayerLegend from '@/components/LayerLegend';
 import { type LayerKey, LAYER_COLORS } from '@/data/tacticalData';
 import { useAllIntelData, useConflictZones } from '@/hooks/useIntelData';
 
-const ALL_LAYERS: LayerKey[] = ['combat', 'unrest', 'aviation', 'naval', 'satellite', 'cyber', 'nuclear', 'base'];
+const ALL_LAYERS: LayerKey[] = ['combat', 'unrest', 'aviation', 'naval', 'satellite', 'cyber', 'nuclear', 'base', 'infrastructure', 'datacenter', 'oilsite', 'seismic', 'cve', 'weather', 'launch', 'ioda', 'ooni', 'threat'];
 
 // Map API event type to our layer key
 const TYPE_TO_LAYER: Record<string, LayerKey> = {
   COMBAT: 'combat', UNREST: 'unrest',
   AVIATION: 'aviation', NAVAL: 'naval', SATELLITE: 'satellite',
   CYBER: 'cyber', NUCLEAR: 'nuclear', BASE: 'base',
+  INFRASTRUCTURE: 'infrastructure', DATACENTER: 'datacenter', OILSITE: 'oilsite',
+  SEISMIC: 'seismic', CVE: 'cve', WEATHER: 'weather', LAUNCH: 'launch',
+  IODA: 'ioda', OONI: 'ooni', THREAT: 'threat',
 };
 
 const Index = () => {
@@ -103,7 +106,11 @@ const Index = () => {
     const allSources = [
       intel.conflicts, intel.unrest, intel.aviation,
       intel.satellite, intel.cyber, intel.nuclear,
-      intel.naval, intel.bases,
+      intel.naval, intel.bases, intel.infrastructure,
+      intel.datacenters, intel.oilsites,
+      intel.seismic, intel.weather, intel.launches,
+      intel.cves, intel.ioda, intel.ooni,
+      intel.threats,
     ];
 
     for (const source of allSources) {
@@ -120,6 +127,16 @@ const Index = () => {
         else if (layer === 'satellite') { radius = 0.35; altitude = 0.01; }
         else if (layer === 'cyber') { radius = 0.35; altitude = 0.015; }
         else if (layer === 'base') { radius = 0.3; altitude = 0.005; }
+        else if (layer === 'infrastructure') { radius = 0.25; altitude = 0.003; }
+        else if (layer === 'datacenter') { radius = 0.3; altitude = 0.008; }
+        else if (layer === 'oilsite') { radius = 0.3; altitude = 0.006; }
+        else if (layer === 'seismic') { radius = 0.4; altitude = 0.01; }
+        else if (layer === 'cve') { radius = 0.3; altitude = 0.012; }
+        else if (layer === 'weather') { radius = 0.4; altitude = 0.01; }
+        else if (layer === 'launch') { radius = 0.35; altitude = 0.02; }
+        else if (layer === 'ioda') { radius = 0.4; altitude = 0.012; }
+        else if (layer === 'ooni') { radius = 0.35; altitude = 0.012; }
+        else if (layer === 'threat') { radius = 0.35; altitude = 0.012; }
 
         pts.push({
           lat: evt.lat,
@@ -155,6 +172,8 @@ const Index = () => {
     addRings(intel.conflicts, LAYER_COLORS.combat, 3, 2, 800);
     addRings(intel.satellite, LAYER_COLORS.satellite, 2, 2, 600);
     addRings(intel.cyber, LAYER_COLORS.cyber, 2.5, 2, 1000);
+    addRings(intel.seismic, LAYER_COLORS.seismic, 3.5, 2, 700);
+    addRings(intel.ioda, LAYER_COLORS.ioda, 2.5, 2, 900);
     return r;
   }, [intel]);
 
@@ -203,8 +222,18 @@ const Index = () => {
     if (intel.bases?.events) {
       const pentagon = intel.bases.events.find(b => b.id === 'BASE-001');
       if (pentagon) {
-        // Forward HQs that report to Pentagon (CENTCOM, EUCOM, PACOM forward bases)
-        const forwardBaseIds = ['BASE-003', 'BASE-005', 'BASE-006', 'BASE-008', 'BASE-010', 'BASE-012'];
+        // Forward HQs that report to Pentagon (CENTCOM, EUCOM, INDOPACOM, AFRICOM forward bases)
+        const forwardBaseIds = [
+          'BASE-003',  // Ramstein AB - USAFE/NATO HQ
+          'BASE-005',  // NSA Bahrain - 5th Fleet
+          'BASE-006',  // Camp Lemonnier - AFRICOM
+          'BASE-008',  // Al Dhafra AB - UAE
+          'BASE-021',  // Al Udeid - CENTCOM Forward
+          'BASE-022',  // Kadena AB - USAF Pacific
+          'BASE-023',  // Camp Humphreys - USFK
+          'BASE-025',  // Andersen AFB - Guam
+          'BASE-032',  // Diego Garcia - Indian Ocean
+        ];
         for (const fwd of intel.bases.events) {
           if (!forwardBaseIds.includes(fwd.id)) continue;
           result.push({
@@ -219,8 +248,25 @@ const Index = () => {
       }
     }
 
+    // Infrastructure: submarine cable and pipeline routes
+    if (activeLayers.has('infrastructure') && intel.infrastructure?.routes) {
+      for (const route of intel.infrastructure.routes) {
+        const isCable = route.type === 'cable';
+        result.push({
+          startLat: route.startLat,
+          startLng: route.startLng,
+          endLat: route.endLat,
+          endLng: route.endLng,
+          color: isCable
+            ? ['#00BFFF', '#00BFFF60']   // deep sky blue for cables
+            : ['#FF8C00', '#FF8C0060'],   // dark orange for pipelines
+          label: `${isCable ? '🔌' : '🛢️'} ${route.name}${route.capacity ? ` (${route.capacity})` : ''} — ${route.status}`,
+        });
+      }
+    }
+
     return result;
-  }, [intel]);
+  }, [intel, activeLayers]);
 
   // Count events per layer for AssetTracker
   const layerCounts = useMemo(() => {

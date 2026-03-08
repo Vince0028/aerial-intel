@@ -1,4 +1,4 @@
-import { LAYER_COLORS, LAYER_LABELS, type LayerKey } from '@/data/tacticalData';
+import { LAYER_COLORS, LAYER_LABELS, LAYER_ICONS, type LayerKey } from '@/data/tacticalData';
 
 interface AssetTrackerProps {
   selectedAsset?: any;
@@ -15,6 +15,7 @@ export default function AssetTracker({ selectedAsset, activeLayers, layerCounts 
       label: LAYER_LABELS[l],
       count: layerCounts[l] || 0,
       color: LAYER_COLORS[l],
+      Icon: LAYER_ICONS[l],
     }));
 
   return (
@@ -27,7 +28,10 @@ export default function AssetTracker({ selectedAsset, activeLayers, layerCounts 
       <div className="space-y-1 mb-3">
         {activeEntries.map(c => (
           <div key={c.layer} className="flex items-center justify-between text-[9px] px-1">
-            <span style={{ color: c.color }}>{c.label}</span>
+            <span className="flex items-center gap-1.5" style={{ color: c.color }}>
+              <c.Icon size={10} />
+              {c.label}
+            </span>
             <span className="text-foreground font-medium">{c.count}</span>
           </div>
         ))}
