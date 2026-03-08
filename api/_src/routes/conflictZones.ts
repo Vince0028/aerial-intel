@@ -6,61 +6,65 @@ const router = Router();
 const TABLE = "conflict_zones";
 
 interface ConflictZone {
-    country: string;   // Full country name matching GeoJSON ADMIN property
-    iso: string;       // ISO A3 code  (e.g. "UKR")
-    severity: number;  // 1â€“10
-    reason: string;    // One-line description
+    country: string;
+    iso: string;
+    severity: number;
+    reason: string;
 }
 
 let zoneCache: { zones: ConflictZone[]; ts: number } | null = null;
-const MEM_TTL = 60 * 60 * 1000; // 1 hour mem cache
+const MEM_TTL = 60 * 60 * 1000;
+
+// Bump this whenever BASE_CONFLICT_ZONES changes -- forces Supabase re-seed on next request
+const ZONE_VERSION = "2026-03-08-v2";
 
 /**
- * HARDCODED base list of all active conflicts as of 2026.
- * These are ALWAYS present â€” no AI variability, no missing countries.
- * Severity: 9-10=full war, 7-8=major conflict, 5-6=insurgency, 3-4=clashes
+ * HARDCODED base list -- all active wars and conflicts as of March 2026.
+ * These are ALWAYS present regardless of what is in Supabase.
  */
 const BASE_CONFLICT_ZONES: ConflictZone[] = [
-    // â”€â”€ Major Active Wars â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    { country: "Ukraine",                     iso: "UKR", severity: 10, reason: "Russia-Ukraine full-scale war" },
-    { country: "Russia",                      iso: "RUS", severity: 10, reason: "Active war â€” Russian territory struck by Ukrainian forces" },
-    { country: "Palestine",                   iso: "PSE", severity: 10, reason: "Israeli military operations in Gaza and West Bank" },
-    { country: "Sudan",                       iso: "SDN", severity: 9,  reason: "RSF vs SAF civil war â€” mass civilian casualties" },
-    { country: "Yemen",                       iso: "YEM", severity: 9,  reason: "Houthi armed conflict, US/Israeli strikes ongoing" },
-    { country: "Myanmar",                     iso: "MMR", severity: 8,  reason: "Military junta vs nationwide resistance forces" },
-    { country: "Haiti",                       iso: "HTI", severity: 8,  reason: "Gang warfare and state collapse" },
-    { country: "Israel",                      iso: "ISR", severity: 8,  reason: "Active military operations in Gaza, Lebanon, Syria" },
-    { country: "Syria",                       iso: "SYR", severity: 7,  reason: "Post-Assad multi-faction armed conflict ongoing" },
-    { country: "Democratic Republic of the Congo", iso: "COD", severity: 8, reason: "M23 rebel offensive â€” major territorial gains" },
-    { country: "Ethiopia",                    iso: "ETH", severity: 7,  reason: "Amhara, Oromo and Tigray armed conflicts" },
-    { country: "Somalia",                     iso: "SOM", severity: 7,  reason: "Al-Shabaab jihadist insurgency" },
-    { country: "Burkina Faso",                iso: "BFA", severity: 8,  reason: "JNIM jihadist insurgency â€” mass displacement" },
-    { country: "Mali",                        iso: "MLI", severity: 7,  reason: "JNIM insurgency â€” Wagner-backed military operations" },
-    { country: "Libya",                       iso: "LBY", severity: 6,  reason: "Rival militia faction armed conflict" },
-    { country: "South Sudan",                 iso: "SSD", severity: 7,  reason: "Internal armed political conflict resumes" },
-    { country: "Nigeria",                     iso: "NGA", severity: 6,  reason: "Boko Haram, ISWAP insurgency and bandit militias" },
-    { country: "Mozambique",                  iso: "MOZ", severity: 6,  reason: "ASWJ jihadist insurgency in Cabo Delgado" },
-    { country: "Central African Republic",    iso: "CAF", severity: 6,  reason: "CPC rebel coalition vs Wagner-backed government" },
-    { country: "Niger",                       iso: "NER", severity: 6,  reason: "JNIM insurgency and post-coup armed instability" },
-    { country: "Chad",                        iso: "TCD", severity: 5,  reason: "Armed rebel groups and Sahel spillover conflict" },
-    { country: "Colombia",                    iso: "COL", severity: 6,  reason: "ELN and FARC dissident armed conflict ongoing" },
-    { country: "Lebanon",                     iso: "LBN", severity: 6,  reason: "Israeli post-war armed incidents and Hezbollah remnants" },
-    { country: "Iraq",                        iso: "IRQ", severity: 5,  reason: "ISIS remnant attacks and PMF armed operations" },
-    { country: "Afghanistan",                 iso: "AFG", severity: 6,  reason: "TTP insurgency and Taliban internal armed conflict" },
-    { country: "Pakistan",                    iso: "PAK", severity: 5,  reason: "TTP cross-border attacks, Baloch insurgency" },
-    { country: "Iran",                        iso: "IRN", severity: 5,  reason: "Israeli airstrikes, Baloch/Kurdish insurgency" },
-    { country: "Mexico",                      iso: "MEX", severity: 6,  reason: "Cartel war â€” military-level armed conflict" },
-    { country: "Philippines",                 iso: "PHL", severity: 4,  reason: "NPA communist insurgency and Abu Sayyaf militant attacks" },
-    { country: "Venezuela",                   iso: "VEN", severity: 5,  reason: "Tren de Aragua gang war and border armed conflict" },
-    { country: "Cameroon",                    iso: "CMR", severity: 5,  reason: "Anglophone separatist armed conflict" },
-    { country: "Uganda",                      iso: "UGA", severity: 4,  reason: "ADF insurgency near DRC border" },
-    { country: "Kenya",                       iso: "KEN", severity: 4,  reason: "Al-Shabaab cross-border attacks" },
-    { country: "Zimbabwe",                    iso: "ZWE", severity: 3,  reason: "Armed political violence and security crackdowns" },
-    { country: "Tanzania",                    iso: "TZA", severity: 3,  reason: "Jihadist spillover from Mozambique insurgency" },
-    { country: "North Korea",                 iso: "PRK", severity: 5,  reason: "Active military provocations and troop deployment to Russia" },
+    // Full-scale wars
+    { country: "Ukraine",                          iso: "UKR", severity: 10, reason: "Russia-Ukraine full-scale war" },
+    { country: "Russia",                           iso: "RUS", severity: 10, reason: "Active war -- Ukrainian strikes on Russian territory" },
+    { country: "Palestine",                        iso: "PSE", severity: 10, reason: "Israeli military operations in Gaza and West Bank" },
+    { country: "Sudan",                            iso: "SDN", severity: 9,  reason: "RSF vs SAF civil war -- mass civilian casualties" },
+    { country: "Yemen",                            iso: "YEM", severity: 9,  reason: "Houthi conflict -- US/Israeli airstrikes ongoing" },
+    { country: "Democratic Republic of the Congo", iso: "COD", severity: 8,  reason: "M23 rebel major offensive -- Goma captured 2025" },
+    { country: "Myanmar",                          iso: "MMR", severity: 8,  reason: "Military junta vs nationwide resistance forces" },
+    { country: "Haiti",                            iso: "HTI", severity: 8,  reason: "Gang warfare and state collapse" },
+    { country: "Israel",                           iso: "ISR", severity: 8,  reason: "Active military operations in Gaza, Lebanon, Syria" },
+    { country: "Burkina Faso",                     iso: "BFA", severity: 8,  reason: "JNIM jihadist insurgency -- mass displacement" },
+    // Major armed conflicts
+    { country: "Syria",                            iso: "SYR", severity: 7,  reason: "Post-Assad multi-faction armed conflict ongoing" },
+    { country: "Ethiopia",                         iso: "ETH", severity: 7,  reason: "Amhara and Oromo armed conflicts ongoing" },
+    { country: "Somalia",                          iso: "SOM", severity: 7,  reason: "Al-Shabaab jihadist insurgency" },
+    { country: "South Sudan",                      iso: "SSD", severity: 7,  reason: "Internal armed political conflict -- resumed 2025" },
+    { country: "Mali",                             iso: "MLI", severity: 7,  reason: "JNIM insurgency -- major territory lost to jihadists" },
+    // Significant insurgencies / civil conflicts
+    { country: "Nigeria",                          iso: "NGA", severity: 6,  reason: "Boko Haram, ISWAP insurgency and banditry" },
+    { country: "Mozambique",                       iso: "MOZ", severity: 6,  reason: "ASWJ jihadist insurgency in Cabo Delgado" },
+    { country: "Central African Republic",         iso: "CAF", severity: 6,  reason: "CPC rebel coalition vs government armed conflict" },
+    { country: "Niger",                            iso: "NER", severity: 6,  reason: "JNIM insurgency and post-coup armed instability" },
+    { country: "Colombia",                         iso: "COL", severity: 6,  reason: "ELN and FARC dissident armed conflict ongoing" },
+    { country: "Lebanon",                          iso: "LBN", severity: 6,  reason: "Post-war armed incidents and Hezbollah remnants" },
+    { country: "Afghanistan",                      iso: "AFG", severity: 6,  reason: "TTP insurgency and Taliban internal armed conflict" },
+    { country: "Mexico",                           iso: "MEX", severity: 6,  reason: "Cartel war -- military-level armed conflict" },
+    { country: "Libya",                            iso: "LBY", severity: 6,  reason: "Rival militia faction armed conflict" },
+    // Ongoing lower-intensity conflicts
+    { country: "Iraq",                             iso: "IRQ", severity: 5,  reason: "ISIS remnant attacks and PMF operations" },
+    { country: "Pakistan",                         iso: "PAK", severity: 5,  reason: "TTP cross-border attacks, Baloch insurgency" },
+    { country: "Iran",                             iso: "IRN", severity: 5,  reason: "Israeli airstrikes, Baloch/Kurdish insurgency" },
+    { country: "Venezuela",                        iso: "VEN", severity: 5,  reason: "Tren de Aragua gang war and border armed conflict" },
+    { country: "North Korea",                      iso: "PRK", severity: 5,  reason: "Troops deployed to Russia, active military provocations" },
+    { country: "Chad",                             iso: "TCD", severity: 5,  reason: "Armed rebel groups and Sahel jihadist spillover" },
+    { country: "Cameroon",                         iso: "CMR", severity: 5,  reason: "Anglophone separatist armed conflict" },
+    { country: "Philippines",                      iso: "PHL", severity: 4,  reason: "NPA communist insurgency and Abu Sayyaf attacks" },
+    { country: "Uganda",                           iso: "UGA", severity: 4,  reason: "ADF insurgency near DRC border" },
+    { country: "Kenya",                            iso: "KEN", severity: 4,  reason: "Al-Shabaab cross-border attacks" },
+    { country: "Zimbabwe",                         iso: "ZWE", severity: 3,  reason: "Armed political violence and security crackdowns" },
+    { country: "Tanzania",                         iso: "TZA", severity: 3,  reason: "Jihadist spillover from Mozambique insurgency" },
 ];
 
-// Approximate centroids for storing zones as IntelEvents in Supabase
 const ISO_CENTROIDS: Record<string, [number, number]> = {
     UKR: [48.4, 31.2], RUS: [55.75, 37.6], PSE: [31.9, 35.2], ISR: [31.0, 34.8],
     SDN: [12.9, 30.2], SSD: [7.9, 30.0], MMR: [21.9, 95.9], ETH: [9.1, 40.5],
@@ -70,8 +74,7 @@ const ISO_CENTROIDS: Record<string, [number, number]> = {
     IRQ: [33.2, 43.7], IRN: [32.4, 53.7], LBN: [33.9, 35.5], MEX: [23.6, -102.5],
     PAK: [30.4, 69.3], PHL: [12.9, 121.8], CAF: [7.0, 21.0], NER: [17.6, 8.1],
     TCD: [15.5, 18.7], KEN: [-0.02, 37.9], CMR: [3.9, 11.5], UGA: [1.4, 32.3],
-    VEN: [6.4, -66.6], ZWE: [-20.0, 29.2], TZA: [-6.4, 34.9],
-    PRK: [40.3, 127.5],
+    VEN: [6.4, -66.6], ZWE: [-20.0, 29.2], TZA: [-6.4, 34.9], PRK: [40.3, 127.5],
 };
 
 function zonesToEvents(zones: ConflictZone[]): IntelEvent[] {
@@ -87,7 +90,14 @@ function zonesToEvents(zones: ConflictZone[]): IntelEvent[] {
             label: z.reason || `${z.country} conflict zone`,
             color: LAYER_COLORS.COMBAT,
             timestamp: now,
-            meta: { country: z.country, iso: z.iso, severity: z.severity, reason: z.reason, isConflictZone: true },
+            meta: {
+                country: z.country,
+                iso: z.iso,
+                severity: z.severity,
+                reason: z.reason,
+                isConflictZone: true,
+                zoneVersion: ZONE_VERSION,
+            },
         };
     });
 }
@@ -105,18 +115,23 @@ function eventsToZones(events: IntelEvent[]): ConflictZone[] {
 }
 
 /**
- * Merge base zones + Groq-detected extras from GDELT.
- * Base zones always override AI output for known countries.
+ * Always layer BASE_CONFLICT_ZONES on top of any DB/Groq extras.
+ * Hardcoded entries always override stale DB rows for the same ISO code.
+ */
+function mergeWithBase(extras: ConflictZone[]): ConflictZone[] {
+    const merged = new Map<string, ConflictZone>();
+    for (const z of extras) merged.set(z.iso, z);
+    for (const z of BASE_CONFLICT_ZONES) merged.set(z.iso, z); // base always wins
+    return Array.from(merged.values()).sort((a, b) => b.severity - a.severity);
+}
+
+/**
+ * Build zones: start from BASE, then add GDELT-detected extras via Groq.
  */
 async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
     const merged = new Map<string, ConflictZone>();
+    for (const z of BASE_CONFLICT_ZONES) merged.set(z.iso, z);
 
-    // Start with the hardcoded base â€” always reliable
-    for (const z of BASE_CONFLICT_ZONES) {
-        merged.set(z.iso, z);
-    }
-
-    // Try Groq only if we have GDELT data to analyse
     if (conflictEvents.length > 0 && process.env.GROQ_API_KEY) {
         try {
             const countryCounts: Record<string, { count: number; labels: string[] }> = {};
@@ -131,7 +146,7 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
 
             const summary = Object.entries(countryCounts)
                 .sort((a, b) => b[1].count - a[1].count)
-                .filter(([c]) => !BASE_CONFLICT_ZONES.find(z => z.country === c)) // only new countries
+                .filter(([c]) => !BASE_CONFLICT_ZONES.find(z => z.country === c))
                 .slice(0, 15)
                 .map(([c, v]) => `${c} (${v.count} events): ${v.labels.join(" | ")}`)
                 .join("\n");
@@ -144,7 +159,7 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
                         model: "llama-3.3-70b-versatile",
                         messages: [{
                             role: "user",
-                            content: `From this GDELT news data, identify any NEW countries with armed conflict that are NOT already in this list: ${BASE_CONFLICT_ZONES.map(z => z.iso).join(",")}\n\nGDELT data:\n${summary}\n\nReturn ONLY a JSON array or empty [] if nothing new. Each item: {"country":"Full Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason"}\nNO markdown, NO code fences.`,
+                            content: `From this GDELT news data, identify any NEW countries with active armed conflict NOT already in this list: ${BASE_CONFLICT_ZONES.map(z => z.iso).join(",")}\n\nGDELT data:\n${summary}\n\nReturn ONLY a JSON array or empty [] if nothing new. Each item: {"country":"Full Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason"}\nNO markdown, NO code fences.`,
                         }],
                         temperature: 0,
                         max_tokens: 600,
@@ -181,8 +196,9 @@ async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
 /**
  * GET /api/intel/conflict-zones
  *
- * Priority: mem-cache (1h) â†’ Supabase (serve instantly + bg refresh after 12h) â†’ build fresh.
- * BASE_CONFLICT_ZONES is always the foundation â€” no missing countries.
+ * Priority: mem-cache (1h) -> Supabase (version-checked, merge base on top) -> build fresh.
+ * BASE_CONFLICT_ZONES ALWAYS present -- stale Supabase rows can never hide current conflicts.
+ * ZONE_VERSION mismatch forces automatic re-seed on next deploy.
  */
 router.get("/", async (_req: Request, res: Response) => {
     try {
@@ -191,15 +207,17 @@ router.get("/", async (_req: Request, res: Response) => {
             return res.json({ zones: zoneCache.zones, source: "Intel DB (live)", count: zoneCache.zones.length });
         }
 
-        // 2. Supabase â€” serve immediately
+        // 2. Supabase -- version check, then merge base on top
         const cached = await readCachedEvents(TABLE, 90);
         if (cached && cached.events.length > 0) {
-            const zones = eventsToZones(cached.events);
-            // If DB has fewer zones than our base list, it's stale â€” rebuild
-            if (zones.length >= BASE_CONFLICT_ZONES.length) {
+            const dbVersion = cached.events[0]?.meta?.zoneVersion as string | undefined;
+
+            if (dbVersion === ZONE_VERSION) {
+                const dbExtras = eventsToZones(cached.events);
+                const zones = mergeWithBase(dbExtras); // BASE always wins over stale rows
                 zoneCache = { zones, ts: Date.now() };
 
-                // Background refresh every 12h (GDELT-driven extras)
+                // Background refresh every 12h for new GDELT-detected conflicts
                 const fetchedAt = new Date(cached.events[0]?.timestamp ?? 0).getTime();
                 if ((Date.now() - fetchedAt) / 3_600_000 > 12) {
                     readCachedEvents("conflicts", 17)
@@ -213,9 +231,11 @@ router.get("/", async (_req: Request, res: Response) => {
 
                 return res.json({ zones, source: "Intel DB (live)", count: zones.length });
             }
+            // Version mismatch -- old Supabase data, fall through to rebuild
+            console.log(`[conflict-zones] DB version "${dbVersion ?? "none"}" outdated, rebuilding...`);
         }
 
-        // 3. Build fresh (first run, or DB had stale/incomplete data)
+        // 3. Build fresh and seed Supabase
         const conflictsData = await readCachedEvents("conflicts", 17);
         const zones = await buildZones(conflictsData?.events ?? []);
 
@@ -223,14 +243,13 @@ router.get("/", async (_req: Request, res: Response) => {
         upsertEvents(TABLE, zonesToEvents(zones), "Intel DB").catch(e =>
             console.error("[conflict-zones] cache write failed:", e.message));
 
-        console.log(`[conflict-zones] Built ${zones.length} conflict zones`);
+        console.log(`[conflict-zones] Built ${zones.length} conflict zones (v${ZONE_VERSION})`);
         return res.json({ zones, source: "Intel DB (live)", count: zones.length });
 
     } catch (err: any) {
         console.error("[conflict-zones]", err.message);
-        // Always fall back to hardcoded base rather than returning empty
-        const fallback = BASE_CONFLICT_ZONES;
-        return res.json({ zones: fallback, source: "Intel DB (fallback)", count: fallback.length });
+        // Always return hardcoded base as absolute fallback
+        return res.json({ zones: BASE_CONFLICT_ZONES, source: "Intel DB (fallback)", count: BASE_CONFLICT_ZONES.length });
     }
 });
 
