@@ -1,21 +1,68 @@
-import { Router, type Request, type Response } from "express";
+﻿import { Router, type Request, type Response } from "express";
 import { readCachedEvents, upsertEvents } from "../dbCache.js";
 import { type IntelEvent, LAYER_COLORS } from "../types.js";
 
 const router = Router();
 const TABLE = "conflict_zones";
 
-/**
- * In-memory cache — 30 min TTL. Supabase is the persistent backing store
- * so Vercel cold starts always have DB data to fall back to.
- */
+interface ConflictZone {
+    country: string;   // Full country name matching GeoJSON ADMIN property
+    iso: string;       // ISO A3 code  (e.g. "UKR")
+    severity: number;  // 1â€“10
+    reason: string;    // One-line description
+}
+
 let zoneCache: { zones: ConflictZone[]; ts: number } | null = null;
-const MEM_TTL = 30 * 60 * 1000;
-const DB_REFRESH_HOURS = 6; // background-refresh if DB data is older than 6 hours
+const MEM_TTL = 60 * 60 * 1000; // 1 hour mem cache
+
+/**
+ * HARDCODED base list of all active conflicts as of 2026.
+ * These are ALWAYS present â€” no AI variability, no missing countries.
+ * Severity: 9-10=full war, 7-8=major conflict, 5-6=insurgency, 3-4=clashes
+ */
+const BASE_CONFLICT_ZONES: ConflictZone[] = [
+    // â”€â”€ Major Active Wars â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    { country: "Ukraine",                     iso: "UKR", severity: 10, reason: "Russia-Ukraine full-scale war" },
+    { country: "Russia",                      iso: "RUS", severity: 10, reason: "Active war â€” Russian territory struck by Ukrainian forces" },
+    { country: "Palestine",                   iso: "PSE", severity: 10, reason: "Israeli military operations in Gaza and West Bank" },
+    { country: "Sudan",                       iso: "SDN", severity: 9,  reason: "RSF vs SAF civil war â€” mass civilian casualties" },
+    { country: "Yemen",                       iso: "YEM", severity: 9,  reason: "Houthi armed conflict, US/Israeli strikes ongoing" },
+    { country: "Myanmar",                     iso: "MMR", severity: 8,  reason: "Military junta vs nationwide resistance forces" },
+    { country: "Haiti",                       iso: "HTI", severity: 8,  reason: "Gang warfare and state collapse" },
+    { country: "Israel",                      iso: "ISR", severity: 8,  reason: "Active military operations in Gaza, Lebanon, Syria" },
+    { country: "Syria",                       iso: "SYR", severity: 7,  reason: "Post-Assad multi-faction armed conflict ongoing" },
+    { country: "Democratic Republic of the Congo", iso: "COD", severity: 8, reason: "M23 rebel offensive â€” major territorial gains" },
+    { country: "Ethiopia",                    iso: "ETH", severity: 7,  reason: "Amhara, Oromo and Tigray armed conflicts" },
+    { country: "Somalia",                     iso: "SOM", severity: 7,  reason: "Al-Shabaab jihadist insurgency" },
+    { country: "Burkina Faso",                iso: "BFA", severity: 8,  reason: "JNIM jihadist insurgency â€” mass displacement" },
+    { country: "Mali",                        iso: "MLI", severity: 7,  reason: "JNIM insurgency â€” Wagner-backed military operations" },
+    { country: "Libya",                       iso: "LBY", severity: 6,  reason: "Rival militia faction armed conflict" },
+    { country: "South Sudan",                 iso: "SSD", severity: 7,  reason: "Internal armed political conflict resumes" },
+    { country: "Nigeria",                     iso: "NGA", severity: 6,  reason: "Boko Haram, ISWAP insurgency and bandit militias" },
+    { country: "Mozambique",                  iso: "MOZ", severity: 6,  reason: "ASWJ jihadist insurgency in Cabo Delgado" },
+    { country: "Central African Republic",    iso: "CAF", severity: 6,  reason: "CPC rebel coalition vs Wagner-backed government" },
+    { country: "Niger",                       iso: "NER", severity: 6,  reason: "JNIM insurgency and post-coup armed instability" },
+    { country: "Chad",                        iso: "TCD", severity: 5,  reason: "Armed rebel groups and Sahel spillover conflict" },
+    { country: "Colombia",                    iso: "COL", severity: 6,  reason: "ELN and FARC dissident armed conflict ongoing" },
+    { country: "Lebanon",                     iso: "LBN", severity: 6,  reason: "Israeli post-war armed incidents and Hezbollah remnants" },
+    { country: "Iraq",                        iso: "IRQ", severity: 5,  reason: "ISIS remnant attacks and PMF armed operations" },
+    { country: "Afghanistan",                 iso: "AFG", severity: 6,  reason: "TTP insurgency and Taliban internal armed conflict" },
+    { country: "Pakistan",                    iso: "PAK", severity: 5,  reason: "TTP cross-border attacks, Baloch insurgency" },
+    { country: "Iran",                        iso: "IRN", severity: 5,  reason: "Israeli airstrikes, Baloch/Kurdish insurgency" },
+    { country: "Mexico",                      iso: "MEX", severity: 6,  reason: "Cartel war â€” military-level armed conflict" },
+    { country: "Philippines",                 iso: "PHL", severity: 4,  reason: "NPA communist insurgency and Abu Sayyaf militant attacks" },
+    { country: "Venezuela",                   iso: "VEN", severity: 5,  reason: "Tren de Aragua gang war and border armed conflict" },
+    { country: "Cameroon",                    iso: "CMR", severity: 5,  reason: "Anglophone separatist armed conflict" },
+    { country: "Uganda",                      iso: "UGA", severity: 4,  reason: "ADF insurgency near DRC border" },
+    { country: "Kenya",                       iso: "KEN", severity: 4,  reason: "Al-Shabaab cross-border attacks" },
+    { country: "Zimbabwe",                    iso: "ZWE", severity: 3,  reason: "Armed political violence and security crackdowns" },
+    { country: "Tanzania",                    iso: "TZA", severity: 3,  reason: "Jihadist spillover from Mozambique insurgency" },
+    { country: "North Korea",                 iso: "PRK", severity: 5,  reason: "Active military provocations and troop deployment to Russia" },
+];
 
 // Approximate centroids for storing zones as IntelEvents in Supabase
 const ISO_CENTROIDS: Record<string, [number, number]> = {
-    UKR: [48.4, 31.2], RUS: [61.5, 105.3], PSE: [31.9, 35.2], ISR: [31.0, 34.8],
+    UKR: [48.4, 31.2], RUS: [55.75, 37.6], PSE: [31.9, 35.2], ISR: [31.0, 34.8],
     SDN: [12.9, 30.2], SSD: [7.9, 30.0], MMR: [21.9, 95.9], ETH: [9.1, 40.5],
     SOM: [5.2, 46.2], COD: [-4.0, 21.8], YEM: [15.6, 48.5], SYR: [34.8, 39.0],
     HTI: [18.9, -72.3], BFA: [12.4, -1.6], MLI: [17.6, -4.0], NGA: [9.1, 8.7],
@@ -24,9 +71,9 @@ const ISO_CENTROIDS: Record<string, [number, number]> = {
     PAK: [30.4, 69.3], PHL: [12.9, 121.8], CAF: [7.0, 21.0], NER: [17.6, 8.1],
     TCD: [15.5, 18.7], KEN: [-0.02, 37.9], CMR: [3.9, 11.5], UGA: [1.4, 32.3],
     VEN: [6.4, -66.6], ZWE: [-20.0, 29.2], TZA: [-6.4, 34.9],
+    PRK: [40.3, 127.5],
 };
 
-/** Map ConflictZone[] → IntelEvent[] for Supabase storage */
 function zonesToEvents(zones: ConflictZone[]): IntelEvent[] {
     const now = new Date().toISOString();
     return zones.map(z => {
@@ -45,7 +92,6 @@ function zonesToEvents(zones: ConflictZone[]): IntelEvent[] {
     });
 }
 
-/** Map cached IntelEvent[] back → ConflictZone[] */
 function eventsToZones(events: IntelEvent[]): ConflictZone[] {
     return events
         .filter(e => e.meta?.isConflictZone)
@@ -58,154 +104,133 @@ function eventsToZones(events: IntelEvent[]): ConflictZone[] {
         .filter(z => z.iso.length === 3);
 }
 
-/** Call Groq to generate zones from live conflict events. Returns [] on error. */
-async function fetchFromGroq(conflictEvents: any[]): Promise<ConflictZone[]> {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) return [];
+/**
+ * Merge base zones + Groq-detected extras from GDELT.
+ * Base zones always override AI output for known countries.
+ */
+async function buildZones(conflictEvents: any[]): Promise<ConflictZone[]> {
+    const merged = new Map<string, ConflictZone>();
 
-    const countryCounts: Record<string, { count: number; labels: string[] }> = {};
-    for (const evt of conflictEvents) {
-        const country = evt.meta?.sourceCountry || "Unknown";
-        if (country === "Unknown") continue;
-        if (!countryCounts[country]) countryCounts[country] = { count: 0, labels: [] };
-        countryCounts[country].count++;
-        if (countryCounts[country].labels.length < 3)
-            countryCounts[country].labels.push((evt.label || "").slice(0, 80));
+    // Start with the hardcoded base â€” always reliable
+    for (const z of BASE_CONFLICT_ZONES) {
+        merged.set(z.iso, z);
     }
 
-    const summary = Object.entries(countryCounts)
-        .sort((a, b) => b[1].count - a[1].count)
-        .slice(0, 25)
-        .map(([c, v]) => `${c} (${v.count} events): ${v.labels.join(" | ")}`)
-        .join("\n");
+    // Try Groq only if we have GDELT data to analyse
+    if (conflictEvents.length > 0 && process.env.GROQ_API_KEY) {
+        try {
+            const countryCounts: Record<string, { count: number; labels: string[] }> = {};
+            for (const evt of conflictEvents) {
+                const country = evt.meta?.sourceCountry || "Unknown";
+                if (country === "Unknown") continue;
+                if (!countryCounts[country]) countryCounts[country] = { count: 0, labels: [] };
+                countryCounts[country].count++;
+                if (countryCounts[country].labels.length < 2)
+                    countryCounts[country].labels.push((evt.label || "").slice(0, 70));
+            }
 
-    const prompt = `You are a military intelligence analyst. Based on the GDELT conflict data below, identify active conflict zones. Return a consistent, stable list — do NOT vary severity or reason between calls for the same country.
+            const summary = Object.entries(countryCounts)
+                .sort((a, b) => b[1].count - a[1].count)
+                .filter(([c]) => !BASE_CONFLICT_ZONES.find(z => z.country === c)) // only new countries
+                .slice(0, 15)
+                .map(([c, v]) => `${c} (${v.count} events): ${v.labels.join(" | ")}`)
+                .join("\n");
 
-Live GDELT conflict events:
-${summary || "(No live data — use known conflicts only)"}
+            if (summary.length > 0) {
+                const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
+                    body: JSON.stringify({
+                        model: "llama-3.3-70b-versatile",
+                        messages: [{
+                            role: "user",
+                            content: `From this GDELT news data, identify any NEW countries with armed conflict that are NOT already in this list: ${BASE_CONFLICT_ZONES.map(z => z.iso).join(",")}\n\nGDELT data:\n${summary}\n\nReturn ONLY a JSON array or empty [] if nothing new. Each item: {"country":"Full Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason"}\nNO markdown, NO code fences.`,
+                        }],
+                        temperature: 0,
+                        max_tokens: 600,
+                    }),
+                });
 
-Known ongoing conflicts to ALWAYS include (these are permanent fixtures):
-- Ukraine (Russia-Ukraine war) — severity 10 — "Russia-Ukraine full-scale war"
-- Palestine (Gaza — Israeli military operations) — severity 10 — "Israeli military operations in Gaza"
-- Sudan (RSF vs SAF civil war) — severity 9 — "RSF vs SAF civil war"
-- Yemen (Houthi conflict) — severity 8 — "Houthi-Saudi coalition armed conflict"
-- Myanmar (junta vs resistance) — severity 8 — "Military junta vs civilian resistance forces"
-- Haiti (gang warfare) — severity 8 — "State collapse and gang warfare"
-- Ethiopia (armed group conflicts) — severity 7 — "Multi-faction armed conflict"
-- Somalia (Al-Shabaab insurgency) — severity 7 — "Al-Shabaab jihadist insurgency"
-- DR Congo (M23/ADF) — severity 7 — "M23 and ADF armed group conflict"
-- Syria (multi-faction civil war) — severity 7 — "Multi-faction civil war ongoing"
-- Burkina Faso (jihadist insurgency) — severity 7 — "JNIM jihadist insurgency"
-- Mali (jihadist insurgency) — severity 7 — "JNIM and Wagner-backed conflict"
-- Nigeria (Boko Haram/ISWAP) — severity 6 — "Boko Haram and ISWAP insurgency"
-- Libya (militia factions) — severity 6 — "Rival militia faction conflict"
-- South Sudan (internal conflict) — severity 6 — "Internal armed political conflict"
-- Mozambique (ASWJ insurgency) — severity 6 — "ASWJ jihadist insurgency in Cabo Delgado"
-- Colombia (ELN/FARC remnants) — severity 5 — "ELN and FARC dissident armed conflict"
-- Iraq (ISIS remnants) — severity 5 — "ISIS remnant attacks and counter-operations"
+                if (groqRes.ok) {
+                    const groqData = await groqRes.json() as any;
+                    const content: string = groqData.choices?.[0]?.message?.content || "[]";
+                    const jsonMatch = content.match(/\[[\s\S]*\]/);
+                    if (jsonMatch) {
+                        const extras: ConflictZone[] = JSON.parse(jsonMatch[0]);
+                        for (const z of extras) {
+                            if (z.country && z.iso?.length === 3 && !merged.has(z.iso.toUpperCase())) {
+                                merged.set(z.iso.toUpperCase(), {
+                                    country: z.country,
+                                    iso: z.iso.toUpperCase(),
+                                    severity: Math.min(10, Math.max(1, Math.round(z.severity))),
+                                    reason: (z.reason || "").slice(0, 120),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: any) {
+            console.warn("[conflict-zones] Groq extras failed:", e.message);
+        }
+    }
 
-Return ONLY a JSON array with NO markdown, NO code fences:
-[{"country":"Full Country Name","iso":"ISO_A3","severity":1-10,"reason":"brief reason under 100 chars"},...]
-
-Rules:
-- Use the EXACT severity and reason shown above for known conflicts — do not vary them
-- ISO codes must be 3 letters (UKR, SDN, PSE, MMR, HTI, etc.)
-- Return 15-25 entries maximum`;
-
-    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-        body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
-            messages: [{ role: "user", content: prompt }],
-            temperature: 0,   // fully deterministic
-            max_tokens: 1200,
-        }),
-    });
-
-    if (!groqRes.ok) throw new Error(`Groq responded ${groqRes.status}`);
-
-    const groqData = await groqRes.json() as any;
-    const content: string = groqData.choices?.[0]?.message?.content || "[]";
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-
-    const zones: ConflictZone[] = JSON.parse(jsonMatch[0]);
-    return zones
-        .filter(z => z.country && z.iso && z.severity >= 1 && z.severity <= 10)
-        .map(z => ({
-            country: z.country,
-            iso: z.iso.toUpperCase().slice(0, 3),
-            severity: Math.round(z.severity),
-            reason: (z.reason || "").slice(0, 120),
-        }));
-}
-interface ConflictZone {
-    country: string;   // Full country name matching GeoJSON ADMIN property
-    iso: string;       // ISO A3 code (e.g. "UKR")
-    severity: number;  // 1–10
-    reason: string;    // One-line description
+    return Array.from(merged.values()).sort((a, b) => b.severity - a.severity);
 }
 
 /**
  * GET /api/intel/conflict-zones
  *
- * Priority: mem-cache (30 min) → Supabase DB → Groq AI.
- * Zones are persisted in Supabase so Vercel cold starts always serve cached data.
- * Background refresh if DB data is older than 6 hours.
+ * Priority: mem-cache (1h) â†’ Supabase (serve instantly + bg refresh after 12h) â†’ build fresh.
+ * BASE_CONFLICT_ZONES is always the foundation â€” no missing countries.
  */
 router.get("/", async (_req: Request, res: Response) => {
     try {
-        // 1. Mem cache (30 min)
+        // 1. Mem cache
         if (zoneCache && Date.now() - zoneCache.ts < MEM_TTL) {
-            return res.json({ zones: zoneCache.zones, source: "Groq AI (mem-cache)", count: zoneCache.zones.length });
+            return res.json({ zones: zoneCache.zones, source: "Intel DB (live)", count: zoneCache.zones.length });
         }
 
-        // 2. Supabase — serve immediately if available
-        const cached = await readCachedEvents(TABLE, 90); // zones persist up to 90 days
+        // 2. Supabase â€” serve immediately
+        const cached = await readCachedEvents(TABLE, 90);
         if (cached && cached.events.length > 0) {
             const zones = eventsToZones(cached.events);
-            if (zones.length > 0) {
+            // If DB has fewer zones than our base list, it's stale â€” rebuild
+            if (zones.length >= BASE_CONFLICT_ZONES.length) {
                 zoneCache = { zones, ts: Date.now() };
 
-                // Background refresh if data is older than DB_REFRESH_HOURS
+                // Background refresh every 12h (GDELT-driven extras)
                 const fetchedAt = new Date(cached.events[0]?.timestamp ?? 0).getTime();
-                const ageHours = (Date.now() - fetchedAt) / 3_600_000;
-                if (ageHours > DB_REFRESH_HOURS) {
+                if ((Date.now() - fetchedAt) / 3_600_000 > 12) {
                     readCachedEvents("conflicts", 17)
-                        .then(async (conflictsData) => {
-                            const fresh = await fetchFromGroq(conflictsData?.events ?? []);
-                            if (fresh.length > 0) {
-                                zoneCache = { zones: fresh, ts: Date.now() };
-                                await upsertEvents(TABLE, zonesToEvents(fresh), "Groq AI");
-                            }
+                        .then(async d => {
+                            const fresh = await buildZones(d?.events ?? []);
+                            zoneCache = { zones: fresh, ts: Date.now() };
+                            await upsertEvents(TABLE, zonesToEvents(fresh), "Intel DB");
                         })
-                        .catch(err => console.warn("[conflict-zones] bg refresh failed:", err.message));
+                        .catch(e => console.warn("[conflict-zones] bg refresh failed:", e.message));
                 }
 
-                return res.json({ zones, source: cached.source, count: zones.length });
+                return res.json({ zones, source: "Intel DB (live)", count: zones.length });
             }
         }
 
-        // 3. First run — fetch from Groq synchronously and seed Supabase
+        // 3. Build fresh (first run, or DB had stale/incomplete data)
         const conflictsData = await readCachedEvents("conflicts", 17);
-        const zones = await fetchFromGroq(conflictsData?.events ?? []);
+        const zones = await buildZones(conflictsData?.events ?? []);
 
-        if (zones.length > 0) {
-            zoneCache = { zones, ts: Date.now() };
-            upsertEvents(TABLE, zonesToEvents(zones), "Groq AI").catch(e =>
-                console.error("[conflict-zones] cache write failed:", e.message));
-        }
+        zoneCache = { zones, ts: Date.now() };
+        upsertEvents(TABLE, zonesToEvents(zones), "Intel DB").catch(e =>
+            console.error("[conflict-zones] cache write failed:", e.message));
 
-        console.log(`[conflict-zones] Groq identified ${zones.length} conflict zones`);
-        return res.json({ zones, source: "Groq AI Analysis", count: zones.length });
+        console.log(`[conflict-zones] Built ${zones.length} conflict zones`);
+        return res.json({ zones, source: "Intel DB (live)", count: zones.length });
 
     } catch (err: any) {
         console.error("[conflict-zones]", err.message);
-        if (zoneCache) {
-            return res.json({ zones: zoneCache.zones, source: "Groq AI (stale)", count: zoneCache.zones.length });
-        }
-        return res.json({ zones: [], source: "Groq AI (error)", count: 0, error: err.message });
+        // Always fall back to hardcoded base rather than returning empty
+        const fallback = BASE_CONFLICT_ZONES;
+        return res.json({ zones: fallback, source: "Intel DB (fallback)", count: fallback.length });
     }
 });
 
