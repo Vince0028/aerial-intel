@@ -17,13 +17,13 @@ let zoneCache: { zones: ConflictZone[]; ts: number } | null = null;
 const MEM_TTL = 60 * 60 * 1000;
 
 // Bump this whenever BASE_CONFLICT_ZONES changes -- forces Supabase re-seed on next request
-const ZONE_VERSION = "2026-03-08-v5";
+const ZONE_VERSION = "2026-03-08-v6";
 
 /**
  * Countries explicitly excluded -- conflict is over / below threshold.
  * Groq cannot re-add these even if GDELT has news about them.
  */
-const EXCLUDED_ISOS = new Set(["PHL", "ZWE", "TZA"]);
+const EXCLUDED_ISOS = new Set(["PHL", "ZWE", "TZA", "COL", "LBY", "IRQ", "VEN", "UGA", "KEN"]);
 
 /**
  * HARDCODED base list -- all active wars and conflicts as of March 2026.
@@ -53,26 +53,15 @@ const BASE_CONFLICT_ZONES: ConflictZone[] = [
     { country: "Mozambique",                       iso: "MOZ", severity:  6, reason: "ASWJ jihadist insurgency in Cabo Delgado",                          startedAt: "2017-10" },
     { country: "Central African Republic",         iso: "CAF", severity:  6, reason: "CPC rebel coalition vs government armed conflict",                  startedAt: "2012-12" },
     { country: "Niger",                            iso: "NER", severity:  6, reason: "JNIM insurgency and post-coup armed instability",                   startedAt: "2023-07" },
-    { country: "Colombia",                         iso: "COL", severity:  6, reason: "ELN and FARC dissident armed conflict ongoing",                     startedAt: "1964" },
     { country: "Lebanon",                          iso: "LBN", severity:  6, reason: "Post-war armed incidents and Hezbollah remnants",                   startedAt: "2023-10" },
     { country: "Afghanistan",                      iso: "AFG", severity:  6, reason: "TTP insurgency and Taliban internal armed conflict",                startedAt: "2021-08" },
     { country: "Mexico",                           iso: "MEX", severity:  6, reason: "Cartel war -- military-level armed conflict",                       startedAt: "2006" },
-    { country: "Libya",                            iso: "LBY", severity:  6, reason: "Rival militia faction armed conflict",                              startedAt: "2011" },
-    // Ongoing lower-intensity conflicts
-    { country: "Iraq",                             iso: "IRQ", severity:  5, reason: "ISIS remnant attacks and PMF operations",                           startedAt: "2019" },
+    // Ongoing lower-intensity conflicts with active 2025 operations
     { country: "Pakistan",                         iso: "PAK", severity:  5, reason: "TTP cross-border attacks, Baloch insurgency",                       startedAt: "2007" },
     { country: "Iran",                             iso: "IRN", severity:  5, reason: "Israeli airstrikes, Baloch/Kurdish insurgency",                     startedAt: "2019" },
-    { country: "Venezuela",                        iso: "VEN", severity:  5, reason: "Tren de Aragua gang war and border armed conflict",                 startedAt: "2016" },
     { country: "North Korea",                      iso: "PRK", severity:  5, reason: "Troops deployed to Russia, active military provocations",           startedAt: "2024-10" },
     { country: "Chad",                             iso: "TCD", severity:  5, reason: "Armed rebel groups and Sahel jihadist spillover",                   startedAt: "2021" },
     { country: "Cameroon",                         iso: "CMR", severity:  5, reason: "Anglophone separatist armed conflict",                              startedAt: "2016" },
-    // Low severity / residual
-    { country: "Uganda",                           iso: "UGA", severity:  4, reason: "ADF insurgency near DRC border",                                    startedAt: "1995" },
-    { country: "Kenya",                            iso: "KEN", severity:  4, reason: "Al-Shabaab cross-border attacks",                                   startedAt: "2011" },
-    { country: "Zimbabwe",                         iso: "ZWE", severity:  3, reason: "Armed political violence and security crackdowns",                  startedAt: "2000" },
-    { country: "Tanzania",                         iso: "TZA", severity:  3, reason: "Jihadist spillover from Mozambique insurgency",                     startedAt: "2022" },
-    // Philippines -- NPA in strategic collapse (<800 fighters), ASG largely dismantled as of 2026
-    { country: "Philippines",                      iso: "PHL", severity:  2, reason: "NPA in strategic collapse -- fewer than 800 fighters; ASG largely dismantled; residual localized violence only", startedAt: "1969" },
 ];
 
 const ISO_CENTROIDS: Record<string, [number, number]> = {
@@ -80,11 +69,9 @@ const ISO_CENTROIDS: Record<string, [number, number]> = {
     SDN: [12.9, 30.2], SSD: [7.9, 30.0], MMR: [21.9, 95.9], ETH: [9.1, 40.5],
     SOM: [5.2, 46.2], COD: [-4.0, 21.8], YEM: [15.6, 48.5], SYR: [34.8, 39.0],
     HTI: [18.9, -72.3], BFA: [12.4, -1.6], MLI: [17.6, -4.0], NGA: [9.1, 8.7],
-    LBY: [26.3, 17.2], MOZ: [-18.7, 35.5], COL: [4.6, -74.3], AFG: [33.9, 67.7],
-    IRQ: [33.2, 43.7], IRN: [32.4, 53.7], LBN: [33.9, 35.5], MEX: [23.6, -102.5],
-    PAK: [30.4, 69.3], CAF: [7.0, 21.0], NER: [17.6, 8.1],
-    TCD: [15.5, 18.7], KEN: [-0.02, 37.9], CMR: [3.9, 11.5], UGA: [1.4, 32.3],
-    VEN: [6.4, -66.6], PRK: [40.3, 127.5],
+    MOZ: [-18.7, 35.5], AFG: [33.9, 67.7], IRN: [32.4, 53.7], LBN: [33.9, 35.5],
+    MEX: [23.6, -102.5], PAK: [30.4, 69.3], CAF: [7.0, 21.0], NER: [17.6, 8.1],
+    TCD: [15.5, 18.7], CMR: [3.9, 11.5], PRK: [40.3, 127.5],
 };
 
 function zonesToEvents(zones: ConflictZone[]): IntelEvent[] {
