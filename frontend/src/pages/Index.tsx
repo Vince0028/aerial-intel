@@ -10,7 +10,7 @@ import { useAllIntelData, useConflictZones } from '@/hooks/useIntelData';
 
 const ALL_LAYERS: LayerKey[] = ['combat', 'unrest', 'aviation', 'naval', 'satellite', 'cyber', 'nuclear', 'base', 'infrastructure', 'datacenter', 'oilsite', 'seismic', 'cve', 'weather', 'launch', 'ioda', 'ooni', 'threat'];
 
-// Map API event type to our layer key
+
 const TYPE_TO_LAYER: Record<string, LayerKey> = {
   COMBAT: 'combat', UNREST: 'unrest',
   AVIATION: 'aviation', NAVAL: 'naval', SATELLITE: 'satellite',
