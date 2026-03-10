@@ -97,6 +97,16 @@ export function useBases() {
     });
 }
 
+export interface CablePath {
+    coords: [number, number][];
+    name: string;
+    color: string;
+    length?: string;
+    rfs?: string;
+    owners?: string;
+    url?: string;
+}
+
 export interface InfrastructureResponse extends ApiResponse {
     routes?: {
         id: string;
@@ -105,13 +115,14 @@ export interface InfrastructureResponse extends ApiResponse {
         startLng: number;
         endLat: number;
         endLng: number;
-        type: 'cable' | 'pipeline';
-        capacity?: string;
+        type: 'pipeline';
         status: string;
     }[];
+    cablePaths?: CablePath[];
+    cableCount?: number;
 }
 
-const EMPTY_INFRA_RESPONSE: InfrastructureResponse = { events: [], source: 'No data', count: 0, routes: [] };
+const EMPTY_INFRA_RESPONSE: InfrastructureResponse = { events: [], source: 'No data', count: 0, routes: [], cablePaths: [] };
 
 export function useInfrastructure() {
     return useQuery({
@@ -125,6 +136,8 @@ export function useInfrastructure() {
         retry: 2,
     });
 }
+
+
 
 export function useDatacenters() {
     return useQuery({

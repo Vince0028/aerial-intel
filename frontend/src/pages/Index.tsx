@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import TacticalGlobe, { type GlobePoint, type ArcRoute, type ConflictZonePolygon } from '@/components/TacticalGlobe';
+import type { CablePath } from '@/hooks/useIntelData';
 import IntelFeed from '@/components/IntelFeed';
 import AssetTracker from '@/components/AssetTracker';
 import StatusBar from '@/components/StatusBar';
@@ -170,12 +171,16 @@ const Index = () => {
     return pts;
   }, [intel]);
 
-  // Build rings from combat, satellite, and cyber events
+  // Build rings from combat, satellite, and cyber events (capped for performance)
+  const MAX_RINGS = 60;
   const rings = useMemo(() => {
     const r: any[] = [];
     const addRings = (layer: LayerKey, source: any, color: string, maxR: number, speed: number, period: number) => {
       if (!activeLayers.has(layer) || !source?.events) return;
-      for (const evt of source.events) {
+      // Only take the most intense events to stay within ring budget
+      const sorted = [...source.events].sort((a: any, b: any) => (b.intensity || 5) - (a.intensity || 5));
+      for (const evt of sorted) {
+        if (r.length >= MAX_RINGS) return;
         r.push({ lat: evt.lat, lng: evt.lng, color, maxR, propagationSpeed: speed, repeatPeriod: period });
       }
     };
@@ -258,25 +263,16 @@ const Index = () => {
       }
     }
 
-    // Infrastructure: submarine cable and pipeline routes
-    if (activeLayers.has('infrastructure') && intel.infrastructure?.routes) {
-      for (const route of intel.infrastructure.routes) {
-        const isCable = route.type === 'cable';
-        result.push({
-          startLat: route.startLat,
-          startLng: route.startLng,
-          endLat: route.endLat,
-          endLng: route.endLng,
-          color: isCable
-            ? ['#00BFFF', '#00BFFF60']   // deep sky blue for cables
-            : ['#FF8C00', '#FF8C0060'],   // dark orange for pipelines
-          label: `${isCable ? '🔌' : '🛢️'} ${route.name}${route.capacity ? ` (${route.capacity})` : ''} — ${route.status}`,
-        });
-      }
-    }
+    // Infrastructure arcs removed — all subsea rendered via pathsData on globe surface
 
     return result;
   }, [intel, activeLayers]);
+
+  // Cable paths from our API (Supabase DB — pre-simplified geometries)
+  const cablePaths = useMemo<CablePath[]>(
+    () => (intel.infrastructure as any)?.cablePaths || [],
+    [intel.infrastructure]
+  );
 
   // Count events per layer for AssetTracker
   const layerCounts = useMemo(() => {
@@ -345,6 +341,7 @@ const Index = () => {
             points={points}
             rings={rings}
             arcs={arcs}
+            cablePaths={cablePaths}
             conflictZones={conflictZonePolygons}
             clusterEnabled={clusterEnabled}
             onAssetSelect={setSelectedAsset}

@@ -198,6 +198,26 @@ CREATE POLICY "anon_full_access" ON oilsites FOR ALL TO anon USING (true) WITH C
 CREATE INDEX IF NOT EXISTS idx_datacenters_fetched ON datacenters (fetched_at DESC);
 CREATE INDEX IF NOT EXISTS idx_oilsites_fetched ON oilsites (fetched_at DESC);
 
+-- ============================================================
+-- SUBMARINE CABLES (TeleGeography — ~600 cables worldwide)
+-- Stores simplified line geometries as JSONB coordinate arrays
+-- ============================================================
+CREATE TABLE IF NOT EXISTS submarine_cables (
+    id TEXT PRIMARY KEY,                 -- e.g. "cable-<slug>" derived from cable name
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#00BFFF',
+    coords JSONB NOT NULL DEFAULT '[]',  -- [[lng,lat], ...] simplified path
+    length_km TEXT,
+    rfs TEXT,                            -- ready-for-service year
+    owners TEXT,
+    url TEXT,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE submarine_cables ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon_full_access" ON submarine_cables FOR ALL TO anon USING (true) WITH CHECK (true);
+CREATE INDEX IF NOT EXISTS idx_cables_fetched ON submarine_cables (fetched_at DESC);
+
 -- 11. SEISMIC (USGS Earthquakes)
 CREATE TABLE IF NOT EXISTS seismic (
     id TEXT PRIMARY KEY,

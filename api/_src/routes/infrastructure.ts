@@ -1,55 +1,176 @@
 import { Router, type Request, type Response } from "express";
 import { type IntelEvent } from "../types.js";
 import { upsertEvents, readCachedEvents } from "../dbCache.js";
+import { getSupabase } from "../supabaseClient.js";
 
 const TABLE = "infrastructure";
+const CABLE_TABLE = "submarine_cables";
 const router = Router();
 
-const SUBMARINE_CABLES: IntelEvent[] = [
-    // === TRANSATLANTIC ===
-    { id: "CAB-001", type: "INFRASTRUCTURE", lat: 50.37, lng: -4.14, intensity: 9, label: "TAT-14 ΓÇö Transatlantic (Bude, UK)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "TAT-14", capacity: "3.2 Tbps", landingPoint: "Bude, UK", endPoint: "Tuckerton, USA", lengthKm: 15428, owners: "Multiple (consortium)", status: "Active" } },
-    { id: "CAB-002", type: "INFRASTRUCTURE", lat: 39.52, lng: -74.32, intensity: 9, label: "TAT-14 ΓÇö Transatlantic (Tuckerton, USA)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "TAT-14", capacity: "3.2 Tbps", landingPoint: "Tuckerton, USA", endPoint: "Bude, UK", lengthKm: 15428, status: "Active" } },
-    { id: "CAB-003", type: "INFRASTRUCTURE", lat: 50.37, lng: -4.14, intensity: 10, label: "AEC-1 ΓÇö Atlantic (Bude, UK)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "AEC-1", capacity: "Tbps class", landingPoint: "Bude, UK", endPoint: "Virginia Beach, USA", lengthKm: 12800, owners: "Aqua Comms", status: "Active" } },
-    { id: "CAB-004", type: "INFRASTRUCTURE", lat: 36.85, lng: -75.97, intensity: 10, label: "AEC-1 ΓÇö Atlantic (Virginia Beach, USA)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "AEC-1", capacity: "Tbps class", landingPoint: "Virginia Beach, USA", endPoint: "Bude, UK", lengthKm: 12800, status: "Active" } },
-    { id: "CAB-005", type: "INFRASTRUCTURE", lat: 41.19, lng: -73.20, intensity: 9, label: "Havfrue/AEC-2 ΓÇö NY to Denmark", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "Havfrue/AEC-2", capacity: "108 Tbps", landingPoint: "Wall, NJ, USA", endPoint: "Blaabjerg, Denmark", lengthKm: 7860, owners: "Google/Aqua Comms", status: "Active" } },
-    { id: "CAB-006", type: "INFRASTRUCTURE", lat: 55.72, lng: 8.13, intensity: 9, label: "Havfrue/AEC-2 ΓÇö Denmark Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "Havfrue/AEC-2", capacity: "108 Tbps", landingPoint: "Blaabjerg, Denmark", endPoint: "Wall, NJ, USA", lengthKm: 7860, status: "Active" } },
-    { id: "CAB-007", type: "INFRASTRUCTURE", lat: 39.77, lng: -74.10, intensity: 10, label: "MAREA ΓÇö US to Spain (Virginia Beach)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "MAREA", capacity: "200 Tbps", landingPoint: "Virginia Beach, USA", endPoint: "Bilbao, Spain", lengthKm: 6600, owners: "Microsoft/Meta/Telxius", status: "Active" } },
-    { id: "CAB-008", type: "INFRASTRUCTURE", lat: 43.26, lng: -2.93, intensity: 10, label: "MAREA ΓÇö US to Spain (Bilbao)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "MAREA", capacity: "200 Tbps", landingPoint: "Bilbao, Spain", endPoint: "Virginia Beach, USA", lengthKm: 6600, status: "Active" } },
+// ========== Geometry simplification (Douglas-Peucker) ==========
+function perpendicularDist(pt: number[], a: number[], b: number[]): number {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.sqrt((pt[0] - a[0]) ** 2 + (pt[1] - a[1]) ** 2);
+    const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / lenSq));
+    const px = a[0] + t * dx, py = a[1] + t * dy;
+    return Math.sqrt((pt[0] - px) ** 2 + (pt[1] - py) ** 2);
+}
 
-    // === TRANSPACIFIC ===
-    { id: "CAB-010", type: "INFRASTRUCTURE", lat: 34.05, lng: -118.25, intensity: 9, label: "PLCN ΓÇö Pacific Light (LA, USA)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "PLCN", capacity: "144 Tbps", landingPoint: "El Segundo, CA, USA", endPoint: "Hong Kong", lengthKm: 12800, owners: "Google/Meta", status: "Active" } },
-    { id: "CAB-011", type: "INFRASTRUCTURE", lat: 22.29, lng: 114.17, intensity: 9, label: "PLCN ΓÇö Pacific Light (Hong Kong)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "PLCN", capacity: "144 Tbps", landingPoint: "Hong Kong", endPoint: "El Segundo, CA, USA", lengthKm: 12800, status: "Active" } },
-    { id: "CAB-012", type: "INFRASTRUCTURE", lat: 33.77, lng: -118.19, intensity: 10, label: "FASTER ΓÇö US to Japan (Hermosa Beach)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "FASTER", capacity: "60 Tbps", landingPoint: "Hermosa Beach, CA", endPoint: "Chiba/Shima, Japan", lengthKm: 11629, owners: "Google consortium", status: "Active" } },
-    { id: "CAB-013", type: "INFRASTRUCTURE", lat: 35.60, lng: 140.11, intensity: 10, label: "FASTER ΓÇö US to Japan (Chiba)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "FASTER", capacity: "60 Tbps", landingPoint: "Chiba, Japan", endPoint: "Hermosa Beach, USA", lengthKm: 11629, status: "Active" } },
-    { id: "CAB-014", type: "INFRASTRUCTURE", lat: 47.61, lng: -122.33, intensity: 9, label: "JGA ΓÇö Japan-Guam-Australia (Seattle CLS)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "JGA", capacity: "36 Tbps", landingPoint: "Seattle region, USA", endPoint: "Multiple (Japan/Guam/AU)", lengthKm: 9500, owners: "Google", status: "Active" } },
+function simplifyLine(coords: number[][], epsilon: number): number[][] {
+    if (coords.length <= 2) return coords;
+    let maxDist = 0, maxIdx = 0;
+    for (let i = 1; i < coords.length - 1; i++) {
+        const d = perpendicularDist(coords[i], coords[0], coords[coords.length - 1]);
+        if (d > maxDist) { maxDist = d; maxIdx = i; }
+    }
+    if (maxDist > epsilon) {
+        const left = simplifyLine(coords.slice(0, maxIdx + 1), epsilon);
+        const right = simplifyLine(coords.slice(maxIdx), epsilon);
+        return left.slice(0, -1).concat(right);
+    }
+    return [coords[0], coords[coords.length - 1]];
+}
 
-    // === ASIA-MIDDLE EAST-EUROPE ===
-    { id: "CAB-020", type: "INFRASTRUCTURE", lat: 31.23, lng: 121.47, intensity: 9, label: "SEA-ME-WE 5 ΓÇö Shanghai Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "SEA-ME-WE 5", capacity: "24 Tbps", landingPoint: "Shanghai, China", endPoint: "Multiple (Europe)", lengthKm: 20000, owners: "Consortium (16+)", status: "Active" } },
-    { id: "CAB-021", type: "INFRASTRUCTURE", lat: 1.35, lng: 103.82, intensity: 9, label: "SEA-ME-WE 5 ΓÇö Singapore Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "SEA-ME-WE 5", capacity: "24 Tbps", landingPoint: "Singapore", endPoint: "Multiple (Europe)", lengthKm: 20000, status: "Active" } },
-    { id: "CAB-022", type: "INFRASTRUCTURE", lat: 30.78, lng: 32.27, intensity: 8, label: "SEA-ME-WE 5 ΓÇö Suez Transit Point", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "SEA-ME-WE 5", capacity: "24 Tbps", landingPoint: "Suez, Egypt", endPoint: "Multiple", lengthKm: 20000, status: "Active" } },
-    { id: "CAB-023", type: "INFRASTRUCTURE", lat: 43.30, lng: 5.37, intensity: 9, label: "SEA-ME-WE 5 ΓÇö Marseille Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "SEA-ME-WE 5", capacity: "24 Tbps", landingPoint: "Marseille, France", endPoint: "Multiple (Asia)", lengthKm: 20000, status: "Active" } },
+// ========== Cable DB interface ==========
+interface CablePathData {
+    coords: [number, number][];
+    name: string;
+    color: string;
+    length?: string;
+    rfs?: string;
+    owners?: string;
+    url?: string;
+}
 
-    // === AFRICA ===
-    { id: "CAB-030", type: "INFRASTRUCTURE", lat: 43.30, lng: 5.37, intensity: 8, label: "2Africa ΓÇö Marseille Landing (Meta)", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "2Africa", capacity: "180+ Tbps", landingPoint: "Marseille, France", endPoint: "Multiple (Africa ring)", lengthKm: 45000, owners: "Meta/MTN/others", status: "Active" } },
-    { id: "CAB-031", type: "INFRASTRUCTURE", lat: -33.92, lng: 18.42, intensity: 8, label: "2Africa ΓÇö Cape Town Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "2Africa", capacity: "180+ Tbps", landingPoint: "Cape Town, South Africa", endPoint: "Multiple (Africa ring)", lengthKm: 45000, status: "Active" } },
-    { id: "CAB-032", type: "INFRASTRUCTURE", lat: 5.56, lng: -0.19, intensity: 7, label: "2Africa ΓÇö Accra Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "2Africa", capacity: "180+ Tbps", landingPoint: "Accra, Ghana", endPoint: "Multiple (Africa ring)", lengthKm: 45000, status: "Active" } },
-    { id: "CAB-033", type: "INFRASTRUCTURE", lat: 6.45, lng: 3.39, intensity: 7, label: "2Africa ΓÇö Lagos Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "2Africa", capacity: "180+ Tbps", landingPoint: "Lagos, Nigeria", endPoint: "Multiple (Africa ring)", lengthKm: 45000, status: "Active" } },
-    { id: "CAB-034", type: "INFRASTRUCTURE", lat: -4.04, lng: 39.67, intensity: 7, label: "2Africa ΓÇö Mombasa Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "2Africa", capacity: "180+ Tbps", landingPoint: "Mombasa, Kenya", endPoint: "Multiple (Africa ring)", lengthKm: 45000, status: "Active" } },
+interface CableRow {
+    id: string;
+    name: string;
+    color: string;
+    coords: [number, number][];
+    length_km: string | null;
+    rfs: string | null;
+    owners: string | null;
+    url: string | null;
+}
 
-    // === SOUTH AMERICA ===
-    { id: "CAB-040", type: "INFRASTRUCTURE", lat: 36.85, lng: -75.97, intensity: 9, label: "BRUSA ΓÇö Virginia Beach to Brazil", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "BRUSA", capacity: "70+ Tbps", landingPoint: "Virginia Beach, USA", endPoint: "Fortaleza/Rio, Brazil", lengthKm: 10556, owners: "Telxius", status: "Active" } },
-    { id: "CAB-041", type: "INFRASTRUCTURE", lat: -3.72, lng: -38.52, intensity: 8, label: "BRUSA ΓÇö Fortaleza, Brazil Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "BRUSA", capacity: "70+ Tbps", landingPoint: "Fortaleza, Brazil", endPoint: "Virginia Beach, USA", lengthKm: 10556, status: "Active" } },
-    { id: "CAB-042", type: "INFRASTRUCTURE", lat: -22.90, lng: -43.17, intensity: 8, label: "EllaLink ΓÇö Rio to Lisbon", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "EllaLink", capacity: "72 Tbps", landingPoint: "Rio de Janeiro, Brazil", endPoint: "Sines, Portugal", lengthKm: 6200, owners: "EllaLink", status: "Active" } },
-    { id: "CAB-043", type: "INFRASTRUCTURE", lat: 37.95, lng: -8.87, intensity: 8, label: "EllaLink ΓÇö Sines, Portugal Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "EllaLink", capacity: "72 Tbps", landingPoint: "Sines, Portugal", endPoint: "Rio de Janeiro, Brazil", lengthKm: 6200, status: "Active" } },
+// In-memory cache (avoids re-reading DB on every request within same invocation)
+let memCache: CablePathData[] | null = null;
+let memCacheTime = 0;
+const MEM_TTL = 10 * 60 * 1000; // 10 min in-memory
 
-    // === ARCTIC / POLAR ===
-    { id: "CAB-050", type: "INFRASTRUCTURE", lat: 70.66, lng: 23.68, intensity: 7, label: "Far North Fiber ΓÇö Hammerfest, Norway", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "Far North Fiber", capacity: "Multi-Tbps", landingPoint: "Hammerfest, Norway", endPoint: "Japan (Arctic route)", lengthKm: 14000, owners: "Far North Digital", status: "Planned/Construction" } },
-    { id: "CAB-051", type: "INFRASTRUCTURE", lat: 64.15, lng: -21.94, intensity: 7, label: "IRIS ΓÇö Iceland Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "IRIS/Danice", capacity: "Multi-Tbps", landingPoint: "Reykjavik, Iceland", endPoint: "Ireland/Denmark", lengthKm: 2500, owners: "Farice", status: "Active" } },
+/** Read cables from Supabase */
+async function readCablesFromDB(): Promise<CablePathData[] | null> {
+    const sb = getSupabase();
+    if (!sb) return null;
+    try {
+        const { data, error } = await sb
+            .from(CABLE_TABLE)
+            .select("name, color, coords, length_km, rfs, owners, url");
+        if (error) { console.error("[cables] DB read:", error.message); return null; }
+        if (!data || data.length === 0) return null;
+        return (data as CableRow[]).map(r => ({
+            coords: r.coords,
+            name: r.name,
+            color: r.color,
+            length: r.length_km ?? undefined,
+            rfs: r.rfs ?? undefined,
+            owners: r.owners ?? undefined,
+            url: r.url ?? undefined,
+        }));
+    } catch (e: any) { console.error("[cables] DB read:", e.message); return null; }
+}
 
-    // === AUSTRALIA / OCEANIA ===
-    { id: "CAB-060", type: "INFRASTRUCTURE", lat: -33.86, lng: 151.21, intensity: 9, label: "Japan-Guam-Australia ΓÇö Sydney Landing", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "JGA South", capacity: "36 Tbps", landingPoint: "Sydney, Australia", endPoint: "Guam/Japan", lengthKm: 9500, owners: "Google", status: "Active" } },
-    { id: "CAB-061", type: "INFRASTRUCTURE", lat: 13.47, lng: 144.75, intensity: 8, label: "JGA ΓÇö Guam Hub", color: "#00BFFF", timestamp: "2026-02-20T00:00:00Z", meta: { category: "cable", cableSystem: "JGA", landingPoint: "Guam", endPoint: "Multiple", lengthKm: 9500, status: "Active" } },
-];
+/** Fetch from TeleGeography, simplify, and upsert into Supabase */
+async function seedCablesFromTeleGeography(): Promise<CablePathData[]> {
+    const res = await fetch("https://www.submarinecablemap.com/api/v3/cable/cable-geo.json");
+    if (!res.ok) throw new Error(`TeleGeography API: ${res.status}`);
+    const geo = await res.json() as {
+        features: {
+            geometry: { coordinates: number[][][] };
+            properties: { name: string; color: string; length?: string; rfs?: string; owners?: string; url?: string };
+        }[];
+    };
+
+    const rows: CableRow[] = [];
+    const paths: CablePathData[] = [];
+    let segIdx = 0;
+
+    for (const feat of geo.features) {
+        const props = feat.properties;
+        for (const rawCoords of feat.geometry.coordinates) {
+            // Douglas-Peucker simplification — epsilon 0.15° ≈ ~17 km
+            // Keeps cable shape accurate while massively reducing point count
+            const simplified = simplifyLine(rawCoords, 0.15) as [number, number][];
+            const slug = props.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 80);
+            const id = `cable-${slug}-${segIdx++}`;
+            rows.push({
+                id,
+                name: props.name,
+                color: props.color || "#00BFFF",
+                coords: simplified,
+                length_km: props.length ?? null,
+                rfs: props.rfs ?? null,
+                owners: props.owners ?? null,
+                url: props.url ?? null,
+            });
+            paths.push({
+                coords: simplified,
+                name: props.name,
+                color: props.color || "#00BFFF",
+                length: props.length,
+                rfs: props.rfs,
+                owners: props.owners,
+                url: props.url,
+            });
+        }
+    }
+
+    // Upsert into Supabase in batches of 200
+    const sb = getSupabase();
+    if (sb) {
+        try {
+            // Clear old data
+            await sb.from(CABLE_TABLE).delete().neq("id", "__never__");
+            for (let i = 0; i < rows.length; i += 200) {
+                const batch = rows.slice(i, i + 200);
+                const { error } = await sb.from(CABLE_TABLE).upsert(batch, { onConflict: "id" });
+                if (error) console.error(`[cables] upsert batch ${i}:`, error.message);
+            }
+            console.log(`[cables] Seeded ${rows.length} cable segments into Supabase`);
+        } catch (e: any) {
+            console.error("[cables] DB seed:", e.message);
+        }
+    }
+
+    return paths;
+}
+
+/** Get all cable paths — reads DB first, seeds from TeleGeography if empty */
+async function fetchCablePaths(): Promise<CablePathData[]> {
+    // In-memory cache
+    if (memCache && Date.now() - memCacheTime < MEM_TTL) return memCache;
+
+    // Try DB first
+    const fromDB = await readCablesFromDB();
+    if (fromDB && fromDB.length > 100) {
+        memCache = fromDB;
+        memCacheTime = Date.now();
+        console.log(`[cables] Loaded ${fromDB.length} cable segments from Supabase`);
+        return fromDB;
+    }
+
+    // DB empty → seed from TeleGeography
+    try {
+        const paths = await seedCablesFromTeleGeography();
+        memCache = paths;
+        memCacheTime = Date.now();
+        return paths;
+    } catch (err: any) {
+        console.error("[cables] TeleGeography fetch failed:", err.message);
+        return memCache || [];
+    }
+}
 
 // ========== UNDERSEA PIPELINES ==========
 const UNDERSEA_PIPELINES: IntelEvent[] = [
@@ -82,48 +203,19 @@ const UNDERSEA_PIPELINES: IntelEvent[] = [
     { id: "PIPE-033", type: "INFRASTRUCTURE", lat: 36.00, lng: -5.60, intensity: 8, label: "Strait of Gibraltar ΓÇö Cable Corridor", color: "#FF4500", timestamp: "2026-02-20T00:00:00Z", meta: { category: "pipeline", pipelineSystem: "Gibraltar", product: "Submarine cables + gas", landingPoint: "Multiple", endPoint: "Multiple", note: "EU-Africa cable/pipe corridor", status: "Strategic" } },
 ];
 
-// ========== CABLE ROUTES (for arc rendering) ==========
-export interface CableRoute {
+// ========== PIPELINE ROUTES (for arc rendering — pipelines only) ==========
+export interface PipelineRoute {
     id: string;
     name: string;
     startLat: number;
     startLng: number;
     endLat: number;
     endLng: number;
-    type: "cable" | "pipeline";
-    capacity?: string;
+    type: "pipeline";
     status: string;
 }
 
-const CABLE_ROUTES: CableRoute[] = [
-    // Transatlantic cables
-    { id: "ROUTE-TAT14", name: "TAT-14", startLat: 50.37, startLng: -4.14, endLat: 39.52, endLng: -74.32, type: "cable", capacity: "3.2 Tbps", status: "Active" },
-    { id: "ROUTE-AEC1", name: "AEC-1", startLat: 50.37, startLng: -4.14, endLat: 36.85, endLng: -75.97, type: "cable", capacity: "Tbps class", status: "Active" },
-    { id: "ROUTE-HAVFRUE", name: "Havfrue/AEC-2", startLat: 55.72, startLng: 8.13, endLat: 41.19, endLng: -73.20, type: "cable", capacity: "108 Tbps", status: "Active" },
-    { id: "ROUTE-MAREA", name: "MAREA", startLat: 43.26, startLng: -2.93, endLat: 39.77, endLng: -74.10, type: "cable", capacity: "200 Tbps", status: "Active" },
-    { id: "ROUTE-ELLALINK", name: "EllaLink", startLat: 37.95, startLng: -8.87, endLat: -22.90, endLng: -43.17, type: "cable", capacity: "72 Tbps", status: "Active" },
-
-    // Transpacific cables
-    { id: "ROUTE-PLCN", name: "PLCN", startLat: 34.05, startLng: -118.25, endLat: 22.29, endLng: 114.17, type: "cable", capacity: "144 Tbps", status: "Active" },
-    { id: "ROUTE-FASTER", name: "FASTER", startLat: 33.77, startLng: -118.19, endLat: 35.60, endLng: 140.11, type: "cable", capacity: "60 Tbps", status: "Active" },
-    { id: "ROUTE-JGA-S", name: "JGA South", startLat: -33.86, startLng: 151.21, endLat: 13.47, endLng: 144.75, type: "cable", status: "Active" },
-    { id: "ROUTE-JGA-N", name: "JGA North", startLat: 13.47, startLng: 144.75, endLat: 35.60, endLng: 140.11, type: "cable", status: "Active" },
-
-    // Asia-Europe (SEA-ME-WE 5 segments)
-    { id: "ROUTE-SMW5-1", name: "SEA-ME-WE 5 (SG→Suez)", startLat: 1.35, startLng: 103.82, endLat: 30.78, endLng: 32.27, type: "cable", capacity: "24 Tbps", status: "Active" },
-    { id: "ROUTE-SMW5-2", name: "SEA-ME-WE 5 (Suez→France)", startLat: 30.78, startLng: 32.27, endLat: 43.30, endLng: 5.37, type: "cable", capacity: "24 Tbps", status: "Active" },
-    { id: "ROUTE-SMW5-3", name: "SEA-ME-WE 5 (China→SG)", startLat: 31.23, startLng: 121.47, endLat: 1.35, endLng: 103.82, type: "cable", capacity: "24 Tbps", status: "Active" },
-
-    // Africa (2Africa ring segments)
-    { id: "ROUTE-2AFR-1", name: "2Africa (France→Ghana)", startLat: 43.30, startLng: 5.37, endLat: 5.56, endLng: -0.19, type: "cable", capacity: "180+ Tbps", status: "Active" },
-    { id: "ROUTE-2AFR-2", name: "2Africa (Ghana→Nigeria)", startLat: 5.56, startLng: -0.19, endLat: 6.45, endLng: 3.39, type: "cable", capacity: "180+ Tbps", status: "Active" },
-    { id: "ROUTE-2AFR-3", name: "2Africa (Nigeria→Cape Town)", startLat: 6.45, startLng: 3.39, endLat: -33.92, endLng: 18.42, type: "cable", capacity: "180+ Tbps", status: "Active" },
-    { id: "ROUTE-2AFR-4", name: "2Africa (Cape Town→Kenya)", startLat: -33.92, startLng: 18.42, endLat: -4.04, endLng: 39.67, type: "cable", capacity: "180+ Tbps", status: "Active" },
-
-    // South America
-    { id: "ROUTE-BRUSA", name: "BRUSA", startLat: 36.85, startLng: -75.97, endLat: -3.72, endLng: -38.52, type: "cable", capacity: "70+ Tbps", status: "Active" },
-
-    // Pipelines
+const PIPELINE_ROUTES: PipelineRoute[] = [
     { id: "ROUTE-NS", name: "Nord Stream", startLat: 60.70, startLng: 28.75, endLat: 54.20, endLng: 12.10, type: "pipeline", status: "Damaged" },
     { id: "ROUTE-LANGELED", name: "Langeled", startLat: 62.70, startLng: 6.15, endLat: 53.65, endLng: 0.10, type: "pipeline", status: "Active" },
     { id: "ROUTE-TAP", name: "TAP Pipeline", startLat: 42.00, startLng: 19.85, endLat: 40.29, endLng: 18.36, type: "pipeline", status: "Active" },
@@ -132,15 +224,29 @@ const CABLE_ROUTES: CableRoute[] = [
     { id: "ROUTE-BALTICPIPE", name: "Baltic Pipe", startLat: 62.70, startLng: 6.15, endLat: 54.50, endLng: 14.55, type: "pipeline", status: "Active" },
 ];
 
-const ALL_INFRASTRUCTURE = [...SUBMARINE_CABLES, ...UNDERSEA_PIPELINES];
-
 router.get("/", async (_req: Request, res: Response) => {
+    // Fetch real submarine cable paths from TeleGeography (cached 6h in-memory)
+    const cablePaths = await fetchCablePaths();
+
+    // Pipeline point events → Supabase cache
     const cached = await readCachedEvents(TABLE);
-    if (cached && cached.events.length > 0) {
-        return res.json({ events: cached.events, routes: CABLE_ROUTES, source: cached.source, count: cached.events.length, routeCount: CABLE_ROUTES.length });
+    const events = cached && cached.events.length > 0
+        ? cached.events
+        : UNDERSEA_PIPELINES;
+
+    if (!cached || cached.events.length === 0) {
+        upsertEvents(TABLE, UNDERSEA_PIPELINES, "Undersea Pipelines (OSINT)").catch(() => {});
     }
-    upsertEvents(TABLE, ALL_INFRASTRUCTURE, "Submarine Cables & Pipelines (OSINT)").catch(() => {});
-    res.json({ events: ALL_INFRASTRUCTURE, routes: CABLE_ROUTES, source: "Submarine Cables & Pipelines (OSINT)", count: ALL_INFRASTRUCTURE.length, routeCount: CABLE_ROUTES.length });
+
+    res.json({
+        events,
+        routes: PIPELINE_ROUTES,
+        cablePaths,
+        source: "Submarine Cables (TeleGeography) & Pipelines (OSINT)",
+        count: events.length,
+        cableCount: cablePaths.length,
+        routeCount: PIPELINE_ROUTES.length,
+    });
 });
 
 export default router;

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Globe from 'react-globe.gl';
 import { LAYER_COLORS, type LayerKey } from '@/data/tacticalData';
 import { createCategorySprite, createClusterSprite } from './GlobeSprites';
+import type { CablePath } from '@/hooks/useIntelData';
 
 // ===== Unified point shape for the globe =====
 export interface GlobePoint {
@@ -106,6 +107,7 @@ interface TacticalGlobeProps {
   points: GlobePoint[];
   rings: GlobeRing[];
   arcs: ArcRoute[];
+  cablePaths?: CablePath[];
   conflictZones?: ConflictZonePolygon[];
   clusterEnabled?: boolean;
   onAssetSelect?: (asset: any) => void;
@@ -134,7 +136,7 @@ const LAYER_SVG: Record<LayerKey, string> = {
   threat:         '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>',
 };
 
-export default function TacticalGlobe({ activeLayers, points, rings, arcs, conflictZones = [], clusterEnabled = true, onAssetSelect }: TacticalGlobeProps) {
+export default function TacticalGlobe({ activeLayers, points, rings, arcs, cablePaths = [], conflictZones = [], clusterEnabled = true, onAssetSelect }: TacticalGlobeProps) {
   const globeRef = useRef<any>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -314,6 +316,40 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
     ">${a.label}</div>`;
   }, []);
 
+  // Cable path label
+  const renderCableLabel = useCallback((d: object) => {
+    const c = d as CablePath;
+    return `<div style="
+      background: rgba(5, 10, 20, 0.92);
+      border: 1px solid ${c.color || '#00BFFF'};
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: #e0e0e0;
+      max-width: 260px;
+      line-height: 1.5;
+      box-shadow: 0 0 16px ${c.color || '#00BFFF'}30;
+      pointer-events: none;
+    ">
+      <div style="color: ${c.color || '#00BFFF'}; font-weight: 700; font-size: 11px; margin-bottom: 3px;">🔌 ${c.name}</div>
+      ${c.length ? `<div style="color:#a0a0a0;font-size:9px;">Length: ${c.length}</div>` : ''}
+      ${c.rfs ? `<div style="color:#a0a0a0;font-size:9px;">RFS: ${c.rfs}</div>` : ''}
+      ${c.owners ? `<div style="color:#a0a0a0;font-size:9px;">Owners: ${c.owners}</div>` : ''}
+    </div>`;
+  }, []);
+
+  // Stabilize cable paths to prevent re-render flicker
+  const stableCablePathsRef = useRef<CablePath[]>(cablePaths);
+  const cablePathsKeyRef = useRef('');
+  const cablePathsKey = useMemo(() => String(cablePaths.length), [cablePaths.length]);
+  if (cablePathsKey !== cablePathsKeyRef.current) {
+    cablePathsKeyRef.current = cablePathsKey;
+    stableCablePathsRef.current = cablePaths;
+  }
+  // Only show cables when infrastructure layer is active
+  const stableCablePaths = activeLayers.has('infrastructure') ? stableCablePathsRef.current : [];
+
   // Conflict zone polygon label
   const renderZoneLabel = useCallback((d: object) => {
     const feat = d as ConflictZonePolygon;
@@ -405,7 +441,7 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
         ringRepeatPeriod={(d: object) => (d as GlobeRing).repeatPeriod}
         ringColor={(d: object) => (d as GlobeRing).color}
 
-        // Arcs — deployment + comms routes
+        // Arcs — deployment + comms routes (naval, pipelines — NOT submarine cables)
         arcsData={stableArcs}
         arcStartLat="startLat"
         arcStartLng="startLng"
@@ -417,6 +453,19 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
         arcDashGap={() => 0.2}
         arcDashAnimateTime={() => 2000}
         arcStroke={() => 0.4}
+
+        // Paths — submarine cables hugging the globe surface
+        // No dash animation — static solid lines for performance (~600 paths)
+        pathsData={stableCablePaths}
+        pathPoints="coords"
+        pathPointLat={(p: any) => p[1]}
+        pathPointLng={(p: any) => p[0]}
+        pathColor={(path: object) => (path as CablePath).color || '#00BFFF'}
+        pathLabel={renderCableLabel}
+        pathStroke={0.3}
+        pathDashLength={0}
+        pathDashGap={0}
+        pathDashAnimateTime={0}
 
         // Conflict Zone polygons — country boundaries highlighted red
         // Kept flat (altitude ~0) so points/arcs above remain hoverable
