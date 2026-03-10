@@ -393,8 +393,13 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     stableCablePathsRef.current = cablePaths;
   }
   // Only show cables when infrastructure layer is active
-  // On mobile: show all cables — renderer-level optimizations handle the GPU load
-  const stableCablePaths = activeLayers.has('infrastructure') ? stableCablePathsRef.current : [];
+  // On mobile: cap to 200 longest cables to stay within GPU budget
+  const stableCablePaths = useMemo(() => {
+    if (!activeLayers.has('infrastructure')) return [];
+    const all = stableCablePathsRef.current;
+    if (!isMobile || all.length <= 200) return all;
+    return [...all].sort((a, b) => b.coords.length - a.coords.length).slice(0, 200);
+  }, [activeLayers, isMobile, cablePathsKey]);
 
   // Conflict zone polygon label
   const renderZoneLabel = useCallback((d: object) => {
