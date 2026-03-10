@@ -528,7 +528,7 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
 
         // Conflict Zone polygons — country boundaries highlighted red
         polygonsData={mobileConflictZones}
-        polygonCapCurvatureResolution={isMobile ? 8 : 1}
+        polygonCapCurvatureResolution={isMobile ? 3 : 1}
         polygonCapColor={(d: object) => {
           const sev = (d as ConflictZonePolygon).properties.severity;
           const alpha = Math.min(0.45, 0.12 + sev * 0.03);

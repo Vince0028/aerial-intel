@@ -99,9 +99,9 @@ async function seedCablesFromTeleGeography(): Promise<CablePathData[]> {
     for (const feat of geo.features) {
         const props = feat.properties;
         for (const rawCoords of feat.geometry.coordinates) {
-            // Douglas-Peucker simplification — epsilon 0.15° ≈ ~17 km
-            // Keeps cable shape accurate while massively reducing point count
-            const simplified = simplifyLine(rawCoords, 0.15) as [number, number][];
+            // Douglas-Peucker simplification — epsilon 0.05° ≈ ~5.5 km
+            // Keeps cable shape accurate while reducing point count
+            const simplified = simplifyLine(rawCoords, 0.05) as [number, number][];
             const slug = props.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 80);
             const id = `cable-${slug}-${segIdx++}`;
             rows.push({
