@@ -1,6 +1,6 @@
 export default function HudOverlay() {
   return (
-    <>
+    <div className="hidden md:contents">
       {/* Mode / Classification */}
       <div className="absolute top-3 left-3 z-10 tactical-border bg-card/80 px-3 py-2">
         <div className="text-[9px] text-muted-foreground tracking-[0.2em] mb-1">GLOBAL C2 TACTICAL DISPLAY</div>
@@ -41,6 +41,6 @@ export default function HudOverlay() {
           <span className="text-[#F59E0B]">Pipeline</span>
         </div>
       </div>
-    </>
+    </div>
   );
 }

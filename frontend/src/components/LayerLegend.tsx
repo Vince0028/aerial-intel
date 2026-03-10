@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ICONS, type LayerKey } from '@/data/tacticalData';
 
 interface LayerLegendProps {
@@ -9,11 +10,21 @@ interface LayerLegendProps {
 
 export default function LayerLegend({ activeLayers, selectedLayer, onToggle, onSelect }: LayerLegendProps) {
   const layers = Object.keys(LAYER_COLORS) as LayerKey[];
+  const [open, setOpen] = useState(true);
 
   return (
-    <div className="tactical-border bg-background/70 backdrop-blur-sm p-2">
-      <div className="text-[9px] text-muted-foreground uppercase tracking-[0.15em] mb-2">Layers</div>
-      <div className="grid grid-cols-3 gap-1">
+    <div className="tactical-border bg-background/70 backdrop-blur-sm">
+      {/* Toggle header */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-2 py-1.5 text-[9px] text-muted-foreground uppercase tracking-[0.15em] hover:text-foreground transition-colors"
+      >
+        <span>Layers</span>
+        <span className="ml-2 text-[10px]">{open ? '▼' : '▲'}</span>
+      </button>
+
+      {/* Collapsible grid */}
+      {open && <div className="grid grid-cols-3 gap-1 px-2 pb-2">
         {layers.map(layer => {
           const active = activeLayers.has(layer);
           const focused = selectedLayer === layer;
@@ -43,7 +54,7 @@ export default function LayerLegend({ activeLayers, selectedLayer, onToggle, onS
             </button>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }

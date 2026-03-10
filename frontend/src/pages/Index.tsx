@@ -27,6 +27,7 @@ const Index = () => {
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [clusterEnabled, setClusterEnabled] = useState(false);
   const [selectedLayer, setSelectedLayer] = useState<LayerKey | null>(null);
+  const [mobileTab, setMobileTab] = useState<'globe' | 'intel' | 'assets'>('globe');
 
   const handleLayerSelect = useCallback((layer: LayerKey) => {
     setSelectedLayer(prev => prev === layer ? null : layer);
@@ -295,11 +296,12 @@ const Index = () => {
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-primary tactical-pulse" />
           <h1 className="text-[11px] font-bold tracking-[0.3em] uppercase text-foreground">
-            GLOBAL COMMAND CENTER
+            <span className="hidden sm:inline">GLOBAL COMMAND CENTER</span>
+            <span className="sm:hidden">GCC</span>
           </h1>
         </div>
-        <div className="flex items-center gap-4 text-[9px] text-muted-foreground">
-          <span>{activeLayers.size} LAYERS ACTIVE</span>
+        <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
+          <span className="hidden sm:inline">{activeLayers.size} LAYERS ACTIVE</span>
           {intel.isLive
             ? <span className="text-tactical-glow">■ LIVE</span>
             : <span className="text-tactical-amber">■ NO DATA</span>
@@ -309,15 +311,17 @@ const Index = () => {
 
       {/* Main */}
       <div className="flex-1 flex min-h-0">
-        {/* Left Panel */}
-        <aside className="w-72 border-r border-border bg-card/50 p-3 overflow-hidden flex flex-col shrink-0">
+        {/* Left Panel — desktop always visible; mobile: shown when intel tab active */}
+        <aside className={`flex flex-col bg-card/50 p-3 overflow-hidden shrink-0 border-r border-border
+          ${ mobileTab === 'intel' ? 'flex-1' : 'hidden'} md:flex md:flex-none md:w-72`}>
           <IntelFeed />
         </aside>
 
-        {/* Center - Globe */}
-        <section className="flex-1 relative bg-background overflow-hidden">
+        {/* Center - Globe — desktop always visible; mobile: shown when globe tab active */}
+        <section className={`relative bg-background overflow-hidden
+          ${ mobileTab === 'globe' ? 'flex-1' : 'hidden'} md:flex md:flex-1`}>
           <HudOverlay />
-          <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1.5">
+          <div className="absolute bottom-14 left-3 md:bottom-3 z-10 flex flex-col gap-1.5">
             <button
               onClick={() => setClusterEnabled(v => !v)}
               className={`flex items-center gap-2 px-2.5 py-1.5 text-[8px] uppercase tracking-widest rounded-sm border transition-all ${
@@ -347,8 +351,9 @@ const Index = () => {
           />
         </section>
 
-        {/* Right Panel */}
-        <aside className="w-64 border-l border-border bg-card/50 p-3 overflow-hidden flex flex-col shrink-0">
+        {/* Right Panel — desktop always visible; mobile: shown when assets tab active */}
+        <aside className={`flex flex-col bg-card/50 p-3 overflow-hidden shrink-0 border-l border-border
+          ${ mobileTab === 'assets' ? 'flex-1' : 'hidden'} md:flex md:flex-none md:w-64`}>
           <AssetTracker
             selectedAsset={selectedAsset}
             selectedLayer={selectedLayer}
@@ -360,7 +365,30 @@ const Index = () => {
         </aside>
       </div>
 
-      <StatusBar layerCounts={layerCounts} isLive={intel.isLive} />
+      {/* Mobile bottom tab navigation */}
+      <nav className="md:hidden border-t border-border bg-card/90 flex h-11 shrink-0">
+        {(['globe', 'intel', 'assets'] as const).map(tab => {
+          const labels = { globe: '🌐 Globe', intel: '📡 Intel', assets: '🎯 Assets' };
+          const active = mobileTab === tab;
+          return (
+            <button
+              key={tab}
+              onClick={() => setMobileTab(tab)}
+              className={`flex-1 text-[9px] uppercase tracking-widest transition-colors border-t-2 ${
+                active
+                  ? 'text-primary border-primary bg-primary/5'
+                  : 'text-muted-foreground border-transparent hover:text-foreground'
+              }`}
+            >
+              {labels[tab]}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="hidden md:block">
+        <StatusBar layerCounts={layerCounts} isLive={intel.isLive} />
+      </div>
     </div>
   );
 };
