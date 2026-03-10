@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Globe from 'react-globe.gl';
+import { Color } from 'three';
 import { LAYER_COLORS, type LayerKey } from '@/data/tacticalData';
 import { createCategorySprite, createClusterSprite } from './GlobeSprites';
 import type { CablePath } from '@/hooks/useIntelData';
@@ -164,6 +165,15 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     };
   }, [glKey]);
 
+  // Force low pixel ratio on mobile to prevent GPU overload (3x retina = 9x pixels)
+  useEffect(() => {
+    if (!isMobile || !globeRef.current) return;
+    try {
+      const renderer = globeRef.current.renderer();
+      if (renderer) renderer.setPixelRatio(1);
+    } catch { /* renderer may not be ready yet */ }
+  }, [glKey, isMobile]);
+
   // Resize
   useEffect(() => {
     const updateSize = () => {
@@ -184,6 +194,14 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
       g.controls().autoRotateSpeed = 0.3;
       g.controls().enableZoom = true;
       g.pointOfView({ lat: 25, lng: 30, altitude: 2.2 });
+
+      // On mobile: set dark background since we skip the star-field texture
+      if (isMobile) {
+        try {
+          const scene = g.scene();
+          if (scene) scene.background = new Color(0x020408);
+        } catch { /* ignore */ }
+      }
 
       // Track camera altitude for dynamic cluster threshold
       let rafPending = false;
@@ -221,10 +239,19 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
   }, [glKey]);
 
   // Filter points by active layers then cluster nearby ones
-  const visiblePoints = useMemo(
-    () => points.filter(p => activeLayers.has(p.layer)),
-    [points, activeLayers]
-  );
+  // On mobile: cap total points to prevent sprite texture overload
+  const visiblePoints = useMemo(() => {
+    const filtered = points.filter(p => activeLayers.has(p.layer));
+    if (isMobile && filtered.length > 60) {
+      // Keep highest-priority points on mobile
+      return filtered.sort((a, b) => {
+        const ai = CLUSTER_PRIORITY.indexOf(a.layer);
+        const bi = CLUSTER_PRIORITY.indexOf(b.layer);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      }).slice(0, 60);
+    }
+    return filtered;
+  }, [points, activeLayers, isMobile]);
 
   // Cluster threshold shrinks as you zoom in — zooming in reveals individual markers
   const clusterThreshold = Math.max(0.4, cameraAlt * 1.4);
@@ -413,11 +440,14 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     </div>`;
   }, []);
 
-  // Limit rings on mobile to prevent animation overload
-  const cappedRings = useMemo(() => isMobile ? rings.slice(0, 15) : rings, [rings, isMobile]);
+  // On mobile: disable rings entirely (animated = constant GPU work)
+  const cappedRings = useMemo(() => isMobile ? [] : rings, [rings, isMobile]);
 
-  // Limit arcs on mobile
-  const cappedArcs = useMemo(() => isMobile ? stableArcs.slice(0, 20) : stableArcs, [stableArcs, isMobile]);
+  // On mobile: minimal arcs, no dash animation
+  const cappedArcs = useMemo(() => isMobile ? stableArcs.slice(0, 5) : stableArcs, [stableArcs, isMobile]);
+
+  // On mobile: skip conflict zone polygons (complex country boundaries = heavy)
+  const mobileConflictZones = useMemo(() => isMobile ? [] : conflictZones, [conflictZones, isMobile]);
 
   return (
     <div ref={containerRef} className="w-full h-full globe-container relative">
@@ -426,11 +456,12 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         ref={globeRef as any}
         width={dimensions.width}
         height={dimensions.height}
+        rendererConfig={isMobile ? { antialias: false, alpha: false, powerPreference: 'low-power' as const } : undefined}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
         bumpImageUrl={isMobile ? undefined : "//unpkg.com/three-globe/example/img/earth-topology.png"}
-        backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
-        atmosphereColor="hsl(120, 100%, 50%)"
-        atmosphereAltitude={isMobile ? 0.08 : 0.12}
+        backgroundImageUrl={isMobile ? undefined : "//unpkg.com/three-globe/example/img/night-sky.png"}
+        atmosphereColor={isMobile ? undefined : "hsl(120, 100%, 50%)"}
+        atmosphereAltitude={isMobile ? 0 : 0.12}
 
         // 3D Object markers — anchored sprites, no gliding
         objectsData={clusteredPoints}
@@ -478,9 +509,9 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         arcEndLng="endLng"
         arcColor={(d: object) => (d as ArcRoute).color}
         arcLabel={renderArcLabel}
-        arcDashLength={() => 0.4}
-        arcDashGap={() => 0.2}
-        arcDashAnimateTime={() => 2000}
+        arcDashLength={() => isMobile ? 0 : 0.4}
+        arcDashGap={() => isMobile ? 0 : 0.2}
+        arcDashAnimateTime={() => isMobile ? 0 : 2000}
         arcStroke={() => 0.4}
 
         // Paths — submarine cables hugging the globe surface
@@ -497,9 +528,9 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         pathDashAnimateTime={0}
 
         // Conflict Zone polygons — country boundaries highlighted red
-        // On mobile: reduce curvature resolution for performance
-        polygonsData={conflictZones}
-        polygonCapCurvatureResolution={isMobile ? 5 : 1}
+        // On mobile: skip entirely to save GPU
+        polygonsData={mobileConflictZones}
+        polygonCapCurvatureResolution={1}
         polygonCapColor={(d: object) => {
           const sev = (d as ConflictZonePolygon).properties.severity;
           const alpha = Math.min(0.45, 0.12 + sev * 0.03);
