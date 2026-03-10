@@ -275,13 +275,19 @@ const Index = () => {
   );
 
   // Count events per layer for AssetTracker
+  // Include unique submarine cables in the infrastructure count
   const layerCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const p of points) {
       counts[p.layer] = (counts[p.layer] || 0) + 1;
     }
+    // Cable paths are rendered as globe paths, not point markers — count unique cable names
+    if (cablePaths.length > 0) {
+      const uniqueCables = new Set(cablePaths.map(c => c.name)).size;
+      counts['infrastructure'] = (counts['infrastructure'] || 0) + uniqueCables;
+    }
     return counts;
-  }, [points]);
+  }, [points, cablePaths]);
 
   return (
     <div className="h-screen w-full flex flex-col overflow-hidden">
@@ -358,6 +364,7 @@ const Index = () => {
             layerCounts={layerCounts}
             points={points}
             onAssetSelect={setSelectedAsset}
+            onClearLayer={() => setSelectedLayer(null)}
           />
         </aside>
       </div>

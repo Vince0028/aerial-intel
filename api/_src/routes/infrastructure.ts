@@ -225,18 +225,12 @@ const PIPELINE_ROUTES: PipelineRoute[] = [
 ];
 
 router.get("/", async (_req: Request, res: Response) => {
-    // Fetch real submarine cable paths from TeleGeography (cached 6h in-memory)
+    // Fetch real submarine cable paths from DB (seeds from TeleGeography on first run)
     const cablePaths = await fetchCablePaths();
 
-    // Pipeline point events → Supabase cache
-    const cached = await readCachedEvents(TABLE);
-    const events = cached && cached.events.length > 0
-        ? cached.events
-        : UNDERSEA_PIPELINES;
-
-    if (!cached || cached.events.length === 0) {
-        upsertEvents(TABLE, UNDERSEA_PIPELINES, "Undersea Pipelines (OSINT)").catch(() => {});
-    }
+    // Pipeline point events — always upsert the canonical list to purge stale cable rows
+    upsertEvents(TABLE, UNDERSEA_PIPELINES, "Undersea Pipelines (OSINT)").catch(() => {});
+    const events = UNDERSEA_PIPELINES;
 
     res.json({
         events,

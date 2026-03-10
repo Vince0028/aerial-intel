@@ -8,9 +8,10 @@ interface AssetTrackerProps {
   layerCounts: Record<string, number>;
   points: GlobePoint[];
   onAssetSelect?: (asset: any) => void;
+  onClearLayer?: () => void;
 }
 
-export default function AssetTracker({ selectedAsset, selectedLayer, activeLayers, layerCounts, points, onAssetSelect }: AssetTrackerProps) {
+export default function AssetTracker({ selectedAsset, selectedLayer, activeLayers, layerCounts, points, onAssetSelect, onClearLayer }: AssetTrackerProps) {
   const layers = Object.keys(LAYER_COLORS) as LayerKey[];
   const activeEntries = layers
     .filter(l => activeLayers.has(l))
@@ -34,11 +35,20 @@ export default function AssetTracker({ selectedAsset, selectedLayer, activeLayer
         <h2 className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
           {selectedLayer ? LAYER_LABELS[selectedLayer] : 'Asset Overview'}
         </h2>
-        {selectedLayer && (
-          <span className="text-[9px] font-medium" style={{ color: layerColor }}>
-            {layerEvents.length} events
-          </span>
-        )}
+        {selectedLayer ? (
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-medium" style={{ color: layerColor }}>
+              {layerEvents.length} events
+            </span>
+            <button
+              onClick={onClearLayer}
+              className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded-sm hover:bg-secondary/60"
+              title="Close layer view"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {selectedLayer ? (
