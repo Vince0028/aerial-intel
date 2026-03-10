@@ -25,6 +25,12 @@ const Index = () => {
     new Set(ALL_LAYERS.filter(l => l !== 'seismic' && l !== 'weather'))
   );
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
+  const [clusterEnabled, setClusterEnabled] = useState(false);
+  const [selectedLayer, setSelectedLayer] = useState<LayerKey | null>(null);
+
+  const handleLayerSelect = useCallback((layer: LayerKey) => {
+    setSelectedLayer(prev => prev === layer ? null : layer);
+  }, []);
 
   // Fetch live data from API
   const intel = useAllIntelData();
@@ -311,8 +317,24 @@ const Index = () => {
         {/* Center - Globe */}
         <section className="flex-1 relative bg-background overflow-hidden">
           <HudOverlay />
-          <div className="absolute bottom-3 left-3 z-10">
-            <LayerLegend activeLayers={activeLayers} onToggle={toggleLayer} />
+          <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1.5">
+            <button
+              onClick={() => setClusterEnabled(v => !v)}
+              className={`flex items-center gap-2 px-2.5 py-1.5 text-[8px] uppercase tracking-widest rounded-sm border transition-all ${
+                clusterEnabled
+                  ? 'border-primary/60 bg-primary/10 text-primary'
+                  : 'border-border/40 bg-background/60 text-muted-foreground opacity-60 hover:opacity-90'
+              }`}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${clusterEnabled ? 'bg-primary tactical-pulse' : 'bg-muted-foreground'}`} />
+              {clusterEnabled ? 'Clustering ON' : 'Clustering OFF'}
+            </button>
+            <LayerLegend
+              activeLayers={activeLayers}
+              selectedLayer={selectedLayer}
+              onToggle={toggleLayer}
+              onSelect={handleLayerSelect}
+            />
           </div>
           <TacticalGlobe
             activeLayers={activeLayers}
@@ -320,13 +342,21 @@ const Index = () => {
             rings={rings}
             arcs={arcs}
             conflictZones={conflictZonePolygons}
+            clusterEnabled={clusterEnabled}
             onAssetSelect={setSelectedAsset}
           />
         </section>
 
         {/* Right Panel */}
         <aside className="w-64 border-l border-border bg-card/50 p-3 overflow-hidden flex flex-col shrink-0">
-          <AssetTracker selectedAsset={selectedAsset} activeLayers={activeLayers} layerCounts={layerCounts} />
+          <AssetTracker
+            selectedAsset={selectedAsset}
+            selectedLayer={selectedLayer}
+            activeLayers={activeLayers}
+            layerCounts={layerCounts}
+            points={points}
+            onAssetSelect={setSelectedAsset}
+          />
         </aside>
       </div>
 

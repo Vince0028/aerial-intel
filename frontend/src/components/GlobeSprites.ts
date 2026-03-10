@@ -422,6 +422,83 @@ function drawIcon(ctx: CanvasRenderingContext2D, category: LayerKey, color: stri
     }
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+    const clean = hex.startsWith('#') ? hex : '#000000';
+    const r = parseInt(clean.slice(1, 3), 16) || 0;
+    const g = parseInt(clean.slice(3, 5), 16) || 0;
+    const b = parseInt(clean.slice(5, 7), 16) || 0;
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * Cluster sprite — a neon badge showing the event count.
+ * Cached like all other sprites so it won't be redrawn every frame.
+ */
+export function createClusterSprite(count: number, color: string, scale = 3.8): THREE.Sprite {
+    const cacheKey = `cluster-${count}-${color}`;
+    let material = textureCache.get(cacheKey);
+
+    if (!material) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d')!;
+
+        // Outer glow ring
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 16;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(32, 32, 26, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Subtle fill
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = hexToRgba(color, 0.2);
+        ctx.beginPath();
+        ctx.arc(32, 32, 23, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Radar tick marks around the ring
+        ctx.strokeStyle = color;
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 8; i++) {
+            const a = (i * Math.PI) / 4;
+            ctx.beginPath();
+            ctx.moveTo(32 + Math.cos(a) * 21, 32 + Math.sin(a) * 21);
+            ctx.lineTo(32 + Math.cos(a) * 26, 32 + Math.sin(a) * 26);
+            ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+
+        // Count number
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#ffffff';
+        const fontSize = count >= 100 ? 13 : count >= 10 ? 16 : 20;
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(count), 32, 32);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        material = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false,
+            sizeAttenuation: true,
+        });
+        textureCache.set(cacheKey, material);
+    }
+
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(scale, scale, 1);
+    return sprite;
+}
+
 export function createCategorySprite(
     category: LayerKey,
     color: string,

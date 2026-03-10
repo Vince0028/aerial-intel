@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Globe from 'react-globe.gl';
 import { LAYER_COLORS, type LayerKey } from '@/data/tacticalData';
-import { createCategorySprite } from './GlobeSprites';
+import { createCategorySprite, createClusterSprite } from './GlobeSprites';
 
 // ===== Unified point shape for the globe =====
 export interface GlobePoint {
@@ -38,6 +38,55 @@ export interface ArcRoute {
   label?: string;
 }
 
+// ===== Cluster of nearby GlobePoints =====
+export interface ClusteredPoint extends GlobePoint {
+  clusterSize: number;
+  clusterItems: GlobePoint[];
+}
+
+// Priority order for choosing the representative point of a cluster
+const CLUSTER_PRIORITY: LayerKey[] = ['nuclear', 'combat', 'cyber', 'danger', 'unrest', 'threat', 'aviation', 'launch', 'naval'];
+
+function clusterPoints(points: GlobePoint[], threshold: number): ClusteredPoint[] {
+  const visited = new Uint8Array(points.length);
+  const clusters: ClusteredPoint[] = [];
+  for (let i = 0; i < points.length; i++) {
+    if (visited[i]) continue;
+    visited[i] = 1;
+    const members: GlobePoint[] = [points[i]];
+    for (let j = i + 1; j < points.length; j++) {
+      if (visited[j]) continue;
+      const dLat = points[i].lat - points[j].lat;
+      const dLng = points[i].lng - points[j].lng;
+      if (Math.sqrt(dLat * dLat + dLng * dLng) < threshold) {
+        visited[j] = 1;
+        members.push(points[j]);
+      }
+    }
+    if (members.length === 1) {
+      clusters.push({ ...members[0], clusterSize: 1, clusterItems: members });
+    } else {
+      const lat = members.reduce((s, p) => s + p.lat, 0) / members.length;
+      const lng = members.reduce((s, p) => s + p.lng, 0) / members.length;
+      const primary = members.slice().sort((a, b) => {
+        const ai = CLUSTER_PRIORITY.indexOf(a.layer);
+        const bi = CLUSTER_PRIORITY.indexOf(b.layer);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      })[0];
+      clusters.push({
+        ...primary,
+        lat,
+        lng,
+        label: `${members.length} Events`,
+        altitude: Math.max(...members.map(m => m.altitude)),
+        clusterSize: members.length,
+        clusterItems: members,
+      });
+    }
+  }
+  return clusters;
+}
+
 // ===== Conflict Zone polygon =====
 export interface ConflictZonePolygon {
   // GeoJSON Feature with properties
@@ -58,6 +107,7 @@ interface TacticalGlobeProps {
   rings: GlobeRing[];
   arcs: ArcRoute[];
   conflictZones?: ConflictZonePolygon[];
+  clusterEnabled?: boolean;
   onAssetSelect?: (asset: any) => void;
 }
 
@@ -84,10 +134,12 @@ const LAYER_SVG: Record<LayerKey, string> = {
   threat:         '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>',
 };
 
-export default function TacticalGlobe({ activeLayers, points, rings, arcs, conflictZones = [], onAssetSelect }: TacticalGlobeProps) {
+export default function TacticalGlobe({ activeLayers, points, rings, arcs, conflictZones = [], clusterEnabled = true, onAssetSelect }: TacticalGlobeProps) {
   const globeRef = useRef<any>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [cameraAlt, setCameraAlt] = useState(2.2);
+  const cameraAltRef = useRef(2.2);
 
   // Resize
   useEffect(() => {
@@ -109,6 +161,23 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
       g.controls().autoRotateSpeed = 0.3;
       g.controls().enableZoom = true;
       g.pointOfView({ lat: 25, lng: 30, altitude: 2.2 });
+
+      // Track camera altitude for dynamic cluster threshold
+      let rafPending = false;
+      const onCameraChange = () => {
+        if (rafPending) return;
+        rafPending = true;
+        requestAnimationFrame(() => {
+          rafPending = false;
+          const alt: number | undefined = globeRef.current?.pointOfView?.()?.altitude;
+          if (typeof alt === 'number' && Math.abs(alt - cameraAltRef.current) > 0.12) {
+            cameraAltRef.current = alt;
+            setCameraAlt(alt);
+          }
+        });
+      };
+      g.controls().addEventListener('change', onCameraChange);
+      return () => g.controls().removeEventListener('change', onCameraChange);
     }
   }, []);
 
@@ -128,10 +197,20 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
     };
   }, []);
 
-  // Filter points by active layers
+  // Filter points by active layers then cluster nearby ones
   const visiblePoints = useMemo(
     () => points.filter(p => activeLayers.has(p.layer)),
     [points, activeLayers]
+  );
+
+  // Cluster threshold shrinks as you zoom in — zooming in reveals individual markers
+  const clusterThreshold = Math.max(0.4, cameraAlt * 1.4);
+  const clusteredPoints = useMemo(
+    () => clusterEnabled
+      ? clusterPoints(visiblePoints, clusterThreshold)
+      : visiblePoints.map(p => ({ ...p, clusterSize: 1, clusterItems: [p] } as ClusteredPoint)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visiblePoints, clusterEnabled, Math.round(clusterThreshold * 4) / 4]
   );
 
   // Stabilize arcs: only replace the arc array reference when arc positions actually
@@ -153,8 +232,47 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
 
   // Rich HTML label for objects
   const renderLabel = useCallback((d: object) => {
-    const p = d as GlobePoint;
+    const p = d as ClusteredPoint;
     const icon = LAYER_SVG[p.layer] || '';
+
+    // Cluster tooltip — list all items inside
+    if (p.clusterSize > 1) {
+      const shown = p.clusterItems.slice(0, 9);
+      const more = p.clusterItems.length - shown.length;
+      const rows = shown.map(item => {
+        const iIcon = LAYER_SVG[item.layer] || '';
+        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid ${item.color}25;">
+          <span style="color:${item.color};flex-shrink:0;">${iIcon}</span>
+          <span style="color:#ccc;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;">${item.label}</span>
+          <span style="color:${item.color};font-size:9px;margin-left:auto;flex-shrink:0;">${item.layer.toUpperCase()}</span>
+        </div>`;
+      }).join('');
+      return `<div style="
+        background: rgba(5, 10, 20, 0.97);
+        border: 1px solid ${p.color};
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        font-size: 11px;
+        color: #e0e0e0;
+        min-width: 240px;
+        max-width: 300px;
+        line-height: 1.5;
+        box-shadow: 0 0 24px ${p.color}40, 0 4px 16px rgba(0,0,0,0.7);
+        pointer-events: none;
+      ">
+        <div style="color:${p.color};font-weight:700;font-size:12px;margin-bottom:6px;letter-spacing:0.5px;">
+          ⬡ ${p.clusterItems.length} EVENTS — zoom in to separate
+        </div>
+        ${rows}
+        ${more > 0 ? `<div style="color:#666;font-size:9px;margin-top:5px;">+${more} more…</div>` : ''}
+        <div style="margin-top:6px;padding-top:5px;border-top:1px solid ${p.color}30;color:#555;font-size:9px;">
+          ${p.lat.toFixed(2)}°N ${p.lng.toFixed(2)}°E
+        </div>
+      </div>`;
+    }
+
+    // Single-point tooltip
     return `<div style="
       background: rgba(5, 10, 20, 0.95);
       border: 1px solid ${p.color};
@@ -250,13 +368,16 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
         atmosphereAltitude={0.12}
 
         // 3D Object markers — anchored sprites, no gliding
-        objectsData={visiblePoints}
+        objectsData={clusteredPoints}
         objectLat="lat"
         objectLng="lng"
         objectAltitude="altitude"
         objectLabel={renderLabel}
         objectThreeObject={(d: object) => {
-          const p = d as GlobePoint;
+          const p = d as ClusteredPoint;
+          if (p.clusterSize > 1) {
+            return createClusterSprite(p.clusterSize, p.color);
+          }
           const scale = p.layer === 'aviation' ? 2.5 :
             p.layer === 'naval' ? 3.5 :
               p.layer === 'nuclear' ? 3.5 :
@@ -264,7 +385,16 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, confl
                   p.layer === 'infrastructure' ? 2.2 : 2.8;
           return createCategorySprite(p.layer, p.color, p.heading, scale);
         }}
-        onObjectClick={(obj: object) => onAssetSelect?.((obj as GlobePoint).raw)}
+        onObjectClick={(obj: object) => {
+          const p = obj as ClusteredPoint;
+          // For single markers, fire the existing callback
+          if (p.clusterSize === 1) onAssetSelect?.(p.raw);
+          // Clusters: zoom the globe in to the cluster centre so icons separate
+          else if (globeRef.current) {
+            const targetAlt = Math.max(0.4, cameraAltRef.current * 0.45);
+            globeRef.current.pointOfView({ lat: p.lat, lng: p.lng, altitude: targetAlt }, 800);
+          }
+        }}
 
         // Rings — pulsing effects for combat, satellite, cyber
         ringsData={rings}
