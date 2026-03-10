@@ -239,19 +239,10 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
   }, [glKey]);
 
   // Filter points by active layers then cluster nearby ones
-  // On mobile: cap total points to prevent sprite texture overload
-  const visiblePoints = useMemo(() => {
-    const filtered = points.filter(p => activeLayers.has(p.layer));
-    if (isMobile && filtered.length > 60) {
-      // Keep highest-priority points on mobile
-      return filtered.sort((a, b) => {
-        const ai = CLUSTER_PRIORITY.indexOf(a.layer);
-        const bi = CLUSTER_PRIORITY.indexOf(b.layer);
-        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-      }).slice(0, 60);
-    }
-    return filtered;
-  }, [points, activeLayers, isMobile]);
+  const visiblePoints = useMemo(
+    () => points.filter(p => activeLayers.has(p.layer)),
+    [points, activeLayers]
+  );
 
   // Cluster threshold shrinks as you zoom in — zooming in reveals individual markers
   const clusterThreshold = Math.max(0.4, cameraAlt * 1.4);
@@ -440,13 +431,13 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     </div>`;
   }, []);
 
-  // On mobile: disable rings entirely (animated = constant GPU work)
-  const cappedRings = useMemo(() => isMobile ? [] : rings, [rings, isMobile]);
+  // On mobile: keep rings but cap to 25 (desktop unlimited)
+  const cappedRings = useMemo(() => isMobile ? rings.slice(0, 25) : rings, [rings, isMobile]);
 
-  // On mobile: minimal arcs, no dash animation
-  const cappedArcs = useMemo(() => isMobile ? stableArcs.slice(0, 5) : stableArcs, [stableArcs, isMobile]);
+  // Keep all arcs; on mobile dash animation is disabled below to save GPU cycles
+  const cappedArcs = stableArcs;
 
-  // On mobile: skip conflict zone polygons (complex country boundaries = heavy)
+  // On mobile: skip conflict zone polygons (complex country boundary geometry is heavy)
   const mobileConflictZones = useMemo(() => isMobile ? [] : conflictZones, [conflictZones, isMobile]);
 
   return (
@@ -459,9 +450,9 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         rendererConfig={isMobile ? { antialias: false, alpha: false, powerPreference: 'low-power' as const } : undefined}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
         bumpImageUrl={isMobile ? undefined : "//unpkg.com/three-globe/example/img/earth-topology.png"}
-        backgroundImageUrl={isMobile ? undefined : "//unpkg.com/three-globe/example/img/night-sky.png"}
-        atmosphereColor={isMobile ? undefined : "hsl(120, 100%, 50%)"}
-        atmosphereAltitude={isMobile ? 0 : 0.12}
+        backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
+        atmosphereColor="hsl(120, 100%, 50%)"
+        atmosphereAltitude={isMobile ? 0.08 : 0.12}
 
         // 3D Object markers — anchored sprites, no gliding
         objectsData={clusteredPoints}
