@@ -387,8 +387,17 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     stableCablePathsRef.current = cablePaths;
   }
   // Only show cables when infrastructure layer is active
-  // On mobile: skip cable paths entirely to prevent GPU overload
-  const stableCablePaths = (!isMobile && activeLayers.has('infrastructure')) ? stableCablePathsRef.current : [];
+  // On mobile: show top 50 longest cables (by coordinate count) to look cool without crashing
+  const MOBILE_CABLE_LIMIT = 50;
+  const stableCablePaths = useMemo(() => {
+    if (!activeLayers.has('infrastructure')) return [];
+    const all = stableCablePathsRef.current;
+    if (!isMobile) return all;
+    // Pick the cables with the most coordinates (= longest visible paths)
+    return [...all]
+      .sort((a, b) => b.coords.length - a.coords.length)
+      .slice(0, MOBILE_CABLE_LIMIT);
+  }, [activeLayers, isMobile, cablePathsKey]);
 
   // Conflict zone polygon label
   const renderZoneLabel = useCallback((d: object) => {
@@ -459,17 +468,19 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         objectLat="lat"
         objectLng="lng"
         objectAltitude="altitude"
-        objectLabel={isMobile ? undefined : renderLabel}
+        objectLabel={renderLabel}
         objectThreeObject={(d: object) => {
           const p = d as ClusteredPoint;
           if (p.clusterSize > 1) {
-            return createClusterSprite(p.clusterSize, p.color);
+            return createClusterSprite(p.clusterSize, p.color, isMobile ? 5.5 : 3.8);
           }
-          const scale = p.layer === 'aviation' ? 2.5 :
+          // Bigger sprites on mobile for easier tapping
+          const mobileBoost = isMobile ? 1.6 : 1;
+          const scale = (p.layer === 'aviation' ? 2.5 :
             p.layer === 'naval' ? 3.5 :
               p.layer === 'nuclear' ? 3.5 :
                 p.layer === 'base' ? 3 :
-                  p.layer === 'infrastructure' ? 2.2 : 2.8;
+                  p.layer === 'infrastructure' ? 2.2 : 2.8) * mobileBoost;
           return createCategorySprite(p.layer, p.color, p.heading, scale);
         }}
         onObjectClick={(obj: object) => {
