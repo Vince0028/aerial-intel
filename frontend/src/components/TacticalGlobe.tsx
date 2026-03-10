@@ -143,6 +143,27 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
   const [cameraAlt, setCameraAlt] = useState(2.2);
   const cameraAltRef = useRef(2.2);
 
+  // Mobile detection — reduce render load on phones
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+  }, []);
+
+  // WebGL context loss recovery
+  const [glKey, setGlKey] = useState(0);
+  useEffect(() => {
+    const canvas = containerRef.current?.querySelector('canvas');
+    if (!canvas) return;
+    const onLost = (e: Event) => { e.preventDefault(); console.warn('[globe] WebGL context lost'); };
+    const onRestored = () => { console.log('[globe] WebGL context restored'); setGlKey(k => k + 1); };
+    canvas.addEventListener('webglcontextlost', onLost);
+    canvas.addEventListener('webglcontextrestored', onRestored);
+    return () => {
+      canvas.removeEventListener('webglcontextlost', onLost);
+      canvas.removeEventListener('webglcontextrestored', onRestored);
+    };
+  }, [glKey]);
+
   // Resize
   useEffect(() => {
     const updateSize = () => {
@@ -181,7 +202,7 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
       g.controls().addEventListener('change', onCameraChange);
       return () => g.controls().removeEventListener('change', onCameraChange);
     }
-  }, []);
+  }, [glKey]);
 
   // Stop auto-rotate on hover, resume on leave
   useEffect(() => {
@@ -197,7 +218,7 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
       el.removeEventListener('mouseenter', stop);
       el.removeEventListener('mouseleave', start);
     };
-  }, []);
+  }, [glKey]);
 
   // Filter points by active layers then cluster nearby ones
   const visiblePoints = useMemo(
@@ -348,7 +369,8 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     stableCablePathsRef.current = cablePaths;
   }
   // Only show cables when infrastructure layer is active
-  const stableCablePaths = activeLayers.has('infrastructure') ? stableCablePathsRef.current : [];
+  // On mobile: skip cable paths entirely to prevent GPU overload
+  const stableCablePaths = (!isMobile && activeLayers.has('infrastructure')) ? stableCablePathsRef.current : [];
 
   // Conflict zone polygon label
   const renderZoneLabel = useCallback((d: object) => {
@@ -391,24 +413,31 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     </div>`;
   }, []);
 
+  // Limit rings on mobile to prevent animation overload
+  const cappedRings = useMemo(() => isMobile ? rings.slice(0, 15) : rings, [rings, isMobile]);
+
+  // Limit arcs on mobile
+  const cappedArcs = useMemo(() => isMobile ? stableArcs.slice(0, 20) : stableArcs, [stableArcs, isMobile]);
+
   return (
     <div ref={containerRef} className="w-full h-full globe-container relative">
       <Globe
+        key={glKey}
         ref={globeRef as any}
         width={dimensions.width}
         height={dimensions.height}
         globeImageUrl="//unpkg.com/three-globe/example/img/earth-night.jpg"
-        bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+        bumpImageUrl={isMobile ? undefined : "//unpkg.com/three-globe/example/img/earth-topology.png"}
         backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
         atmosphereColor="hsl(120, 100%, 50%)"
-        atmosphereAltitude={0.12}
+        atmosphereAltitude={isMobile ? 0.08 : 0.12}
 
         // 3D Object markers — anchored sprites, no gliding
         objectsData={clusteredPoints}
         objectLat="lat"
         objectLng="lng"
         objectAltitude="altitude"
-        objectLabel={renderLabel}
+        objectLabel={isMobile ? undefined : renderLabel}
         objectThreeObject={(d: object) => {
           const p = d as ClusteredPoint;
           if (p.clusterSize > 1) {
@@ -433,7 +462,7 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         }}
 
         // Rings — pulsing effects for combat, satellite, cyber
-        ringsData={rings}
+        ringsData={cappedRings}
         ringLat="lat"
         ringLng="lng"
         ringMaxRadius={(d: object) => (d as GlobeRing).maxR}
@@ -442,7 +471,7 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         ringColor={(d: object) => (d as GlobeRing).color}
 
         // Arcs — deployment + comms routes (naval, pipelines — NOT submarine cables)
-        arcsData={stableArcs}
+        arcsData={cappedArcs}
         arcStartLat="startLat"
         arcStartLng="startLng"
         arcEndLat="endLat"
@@ -468,9 +497,9 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         pathDashAnimateTime={0}
 
         // Conflict Zone polygons — country boundaries highlighted red
-        // Kept flat (altitude ~0) so points/arcs above remain hoverable
+        // On mobile: reduce curvature resolution for performance
         polygonsData={conflictZones}
-        polygonCapCurvatureResolution={1}
+        polygonCapCurvatureResolution={isMobile ? 5 : 1}
         polygonCapColor={(d: object) => {
           const sev = (d as ConflictZonePolygon).properties.severity;
           const alpha = Math.min(0.45, 0.12 + sev * 0.03);
