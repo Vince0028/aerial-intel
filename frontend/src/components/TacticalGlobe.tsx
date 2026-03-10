@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Globe from 'react-globe.gl';
-import { Color } from 'three';
 import { LAYER_COLORS, type LayerKey } from '@/data/tacticalData';
 import { createCategorySprite, createClusterSprite } from './GlobeSprites';
 import type { CablePath } from '@/hooks/useIntelData';
@@ -166,11 +165,26 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
   }, [glKey]);
 
   // Force low pixel ratio on mobile to prevent GPU overload (3x retina = 9x pixels)
+  // Also throttle render loop to 30fps on mobile — halves GPU work, still looks smooth
   useEffect(() => {
     if (!isMobile || !globeRef.current) return;
     try {
       const renderer = globeRef.current.renderer();
-      if (renderer) renderer.setPixelRatio(1);
+      if (renderer) {
+        renderer.setPixelRatio(1);
+        // Cap animation loop to ~30fps instead of 60fps
+        const controls = globeRef.current.controls();
+        let lastFrame = 0;
+        const originalUpdate = controls.update?.bind(controls);
+        if (originalUpdate) {
+          controls.update = () => {
+            const now = performance.now();
+            if (now - lastFrame < 33) return; // ~30fps
+            lastFrame = now;
+            originalUpdate();
+          };
+        }
+      }
     } catch { /* renderer may not be ready yet */ }
   }, [glKey, isMobile]);
 
@@ -194,14 +208,6 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
       g.controls().autoRotateSpeed = 0.3;
       g.controls().enableZoom = true;
       g.pointOfView({ lat: 25, lng: 30, altitude: 2.2 });
-
-      // On mobile: set dark background since we skip the star-field texture
-      if (isMobile) {
-        try {
-          const scene = g.scene();
-          if (scene) scene.background = new Color(0x020408);
-        } catch { /* ignore */ }
-      }
 
       // Track camera altitude for dynamic cluster threshold
       let rafPending = false;
@@ -387,17 +393,8 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     stableCablePathsRef.current = cablePaths;
   }
   // Only show cables when infrastructure layer is active
-  // On mobile: show top 50 longest cables (by coordinate count) to look cool without crashing
-  const MOBILE_CABLE_LIMIT = 50;
-  const stableCablePaths = useMemo(() => {
-    if (!activeLayers.has('infrastructure')) return [];
-    const all = stableCablePathsRef.current;
-    if (!isMobile) return all;
-    // Pick the cables with the most coordinates (= longest visible paths)
-    return [...all]
-      .sort((a, b) => b.coords.length - a.coords.length)
-      .slice(0, MOBILE_CABLE_LIMIT);
-  }, [activeLayers, isMobile, cablePathsKey]);
+  // On mobile: show all cables — renderer-level optimizations handle the GPU load
+  const stableCablePaths = activeLayers.has('infrastructure') ? stableCablePathsRef.current : [];
 
   // Conflict zone polygon label
   const renderZoneLabel = useCallback((d: object) => {
@@ -440,14 +437,14 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
     </div>`;
   }, []);
 
-  // On mobile: keep rings but cap to 25 (desktop unlimited)
-  const cappedRings = useMemo(() => isMobile ? rings.slice(0, 25) : rings, [rings, isMobile]);
+  // Show all rings (capped at 60 in Index.tsx already)
+  const cappedRings = rings;
 
-  // Keep all arcs; on mobile dash animation is disabled below to save GPU cycles
+  // Show all arcs; on mobile dash animation is disabled below to save per-frame work
   const cappedArcs = stableArcs;
 
-  // On mobile: skip conflict zone polygons (complex country boundary geometry is heavy)
-  const mobileConflictZones = useMemo(() => isMobile ? [] : conflictZones, [conflictZones, isMobile]);
+  // Show all conflict zones — use coarser polygon resolution on mobile to reduce triangle count
+  const mobileConflictZones = conflictZones;
 
   return (
     <div ref={containerRef} className="w-full h-full globe-container relative">
@@ -530,9 +527,8 @@ export default function TacticalGlobe({ activeLayers, points, rings, arcs, cable
         pathDashAnimateTime={0}
 
         // Conflict Zone polygons — country boundaries highlighted red
-        // On mobile: skip entirely to save GPU
         polygonsData={mobileConflictZones}
-        polygonCapCurvatureResolution={1}
+        polygonCapCurvatureResolution={isMobile ? 8 : 1}
         polygonCapColor={(d: object) => {
           const sev = (d as ConflictZonePolygon).properties.severity;
           const alpha = Math.min(0.45, 0.12 + sev * 0.03);
