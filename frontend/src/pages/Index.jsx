@@ -1,0 +1,389 @@
+import { useState, useCallback, useMemo, useEffect } from "react";
+import TacticalGlobe from "@/components/TacticalGlobe";
+import IntelFeed from "@/components/IntelFeed";
+import AssetTracker from "@/components/AssetTracker";
+import StatusBar from "@/components/StatusBar";
+import HudOverlay from "@/components/HudOverlay";
+import LayerLegend from "@/components/LayerLegend";
+import { LAYER_COLORS } from "@/data/tacticalData";
+import { useAllIntelData, useConflictZones } from "@/hooks/useIntelData";
+const ALL_LAYERS = ["combat", "unrest", "aviation", "naval", "satellite", "cyber", "nuclear", "base", "infrastructure", "datacenter", "oilsite", "seismic", "cve", "weather", "launch", "ioda", "ooni", "threat"];
+const TYPE_TO_LAYER = {
+  COMBAT: "combat",
+  UNREST: "unrest",
+  AVIATION: "aviation",
+  NAVAL: "naval",
+  SATELLITE: "satellite",
+  CYBER: "cyber",
+  NUCLEAR: "nuclear",
+  BASE: "base",
+  INFRASTRUCTURE: "infrastructure",
+  DATACENTER: "datacenter",
+  OILSITE: "oilsite",
+  SEISMIC: "seismic",
+  CVE: "cve",
+  WEATHER: "weather",
+  LAUNCH: "launch",
+  IODA: "ioda",
+  OONI: "ooni",
+  THREAT: "threat"
+};
+const Index = () => {
+  const [activeLayers, setActiveLayers] = useState(
+    new Set(ALL_LAYERS.filter((l) => l !== "seismic" && l !== "weather"))
+  );
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [clusterEnabled, setClusterEnabled] = useState(false);
+  const [selectedLayer, setSelectedLayer] = useState(null);
+  const [mobileTab, setMobileTab] = useState("globe");
+  const handleLayerSelect = useCallback((layer) => {
+    setSelectedLayer((prev) => prev === layer ? null : layer);
+  }, []);
+  const intel = useAllIntelData();
+  const conflictZonesQuery = useConflictZones();
+  const [geoJson, setGeoJson] = useState([]);
+  useEffect(() => {
+    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then((r) => r.json()).then((topo) => {
+      import("topojson-client").then(({ feature }) => {
+        const fc = feature(topo, topo.objects.countries);
+        setGeoJson(fc.features);
+      });
+    }).catch((err) => console.error("[geoJson] Failed to load country boundaries:", err));
+  }, []);
+  const conflictZonePolygons = useMemo(() => {
+    const zones = conflictZonesQuery.data?.zones || [];
+    if (zones.length === 0 || geoJson.length === 0) return [];
+    const ISO_TO_NUMERIC = {
+      "AFG": "004",
+      "DZA": "012",
+      "AGO": "024",
+      "BDI": "108",
+      "CMR": "120",
+      "CAF": "140",
+      "TCD": "148",
+      "COL": "170",
+      "COD": "180",
+      "CUB": "192",
+      "EGY": "818",
+      "ERI": "232",
+      "ETH": "231",
+      "IRN": "364",
+      "IRQ": "368",
+      "ISR": "376",
+      "LBN": "422",
+      "LBY": "434",
+      "MLI": "466",
+      "MMR": "104",
+      "MOZ": "508",
+      "NGA": "566",
+      "PAK": "586",
+      "PSE": "275",
+      "RUS": "643",
+      "SDN": "729",
+      "SOM": "706",
+      "SSD": "728",
+      "SYR": "760",
+      "UKR": "804",
+      "VEN": "862",
+      "YEM": "887",
+      "MEX": "484",
+      "PHL": "608",
+      "MYS": "458",
+      "TUR": "792",
+      "SAU": "682",
+      "IND": "356",
+      "CHN": "156",
+      "KOR": "410",
+      "PRK": "408",
+      "THA": "764",
+      "IDN": "360",
+      "BGD": "050",
+      "HTI": "332",
+      "KEN": "404",
+      "UGA": "800",
+      "TZA": "834",
+      "ZWE": "716",
+      "NER": "562",
+      "BFA": "854",
+      "GBR": "826",
+      "FRA": "250",
+      "DEU": "276",
+      "USA": "840"
+    };
+    const polygons = [];
+    for (const zone of zones) {
+      const numericId = ISO_TO_NUMERIC[zone.iso];
+      if (!numericId) continue;
+      const feature = geoJson.find((f) => f.id === numericId);
+      if (!feature) continue;
+      polygons.push({
+        type: "Feature",
+        properties: {
+          ADMIN: zone.country,
+          ISO_A3: zone.iso,
+          severity: zone.severity,
+          reason: zone.reason,
+          startedAt: zone.startedAt
+        },
+        geometry: feature.geometry
+      });
+    }
+    return polygons;
+  }, [conflictZonesQuery.data, geoJson]);
+  const toggleLayer = useCallback((layer) => {
+    setActiveLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(layer)) next.delete(layer);
+      else next.add(layer);
+      return next;
+    });
+  }, []);
+  const points = useMemo(() => {
+    const pts = [];
+    const allSources = [
+      intel.conflicts,
+      intel.unrest,
+      intel.aviation,
+      intel.satellite,
+      intel.cyber,
+      intel.nuclear,
+      intel.naval,
+      intel.bases,
+      intel.infrastructure,
+      intel.datacenters,
+      intel.oilsites,
+      intel.seismic,
+      intel.weather,
+      intel.launches,
+      intel.cves,
+      intel.ioda,
+      intel.ooni,
+      intel.threats
+    ];
+    for (const source of allSources) {
+      if (!source?.events) continue;
+      for (const evt of source.events) {
+        const layer = TYPE_TO_LAYER[evt.type] || "combat";
+        let radius = 0.35;
+        let altitude = 8e-3;
+        if (layer === "aviation") {
+          radius = 0.3;
+          altitude = 0.025;
+        } else if (layer === "naval") {
+          radius = evt.meta?.vesselType === "carrier_group" ? 0.55 : 0.4;
+          altitude = 5e-3;
+        } else if (layer === "combat") {
+          radius = 0.45;
+          altitude = 0.012;
+        } else if (layer === "nuclear") {
+          radius = 0.4;
+          altitude = 8e-3;
+        } else if (layer === "satellite") {
+          radius = 0.35;
+          altitude = 0.01;
+        } else if (layer === "cyber") {
+          radius = 0.35;
+          altitude = 0.015;
+        } else if (layer === "base") {
+          radius = 0.3;
+          altitude = 5e-3;
+        } else if (layer === "infrastructure") {
+          radius = 0.25;
+          altitude = 3e-3;
+        } else if (layer === "datacenter") {
+          radius = 0.3;
+          altitude = 8e-3;
+        } else if (layer === "oilsite") {
+          radius = 0.3;
+          altitude = 6e-3;
+        } else if (layer === "seismic") {
+          radius = 0.4;
+          altitude = 0.01;
+        } else if (layer === "cve") {
+          radius = 0.3;
+          altitude = 0.012;
+        } else if (layer === "weather") {
+          radius = 0.4;
+          altitude = 0.01;
+        } else if (layer === "launch") {
+          radius = 0.35;
+          altitude = 0.02;
+        } else if (layer === "ioda") {
+          radius = 0.4;
+          altitude = 0.012;
+        } else if (layer === "ooni") {
+          radius = 0.35;
+          altitude = 0.012;
+        } else if (layer === "threat") {
+          radius = 0.35;
+          altitude = 0.012;
+        }
+        pts.push({
+          lat: evt.lat,
+          lng: evt.lng,
+          label: evt.label,
+          detail: evt.meta ? Object.entries(evt.meta).filter(([k]) => !["source", "notes"].includes(k)).map(([k, v]) => `${k}: ${v}`).slice(0, 4).join(" \xB7 ") : "",
+          color: evt.color || LAYER_COLORS[layer] || "#ffffff",
+          radius,
+          altitude,
+          layer,
+          raw: evt,
+          heading: evt.meta?.heading,
+          timestamp: evt.timestamp
+        });
+      }
+    }
+    return pts;
+  }, [intel]);
+  const MAX_RINGS = 60;
+  const rings = useMemo(() => {
+    const r = [];
+    const addRings = (layer, source, color, maxR, speed, period) => {
+      if (!activeLayers.has(layer) || !source?.events) return;
+      const sorted = [...source.events].sort((a, b) => (b.intensity || 5) - (a.intensity || 5));
+      for (const evt of sorted) {
+        if (r.length >= MAX_RINGS) return;
+        r.push({ lat: evt.lat, lng: evt.lng, color, maxR, propagationSpeed: speed, repeatPeriod: period });
+      }
+    };
+    addRings("combat", intel.conflicts, LAYER_COLORS.combat, 3, 2, 800);
+    addRings("satellite", intel.satellite, LAYER_COLORS.satellite, 2, 2, 600);
+    addRings("cyber", intel.cyber, LAYER_COLORS.cyber, 2.5, 2, 1e3);
+    addRings("seismic", intel.seismic, LAYER_COLORS.seismic, 3.5, 2, 700);
+    addRings("ioda", intel.ioda, LAYER_COLORS.ioda, 2.5, 2, 900);
+    return r;
+  }, [intel, activeLayers]);
+  const arcs = useMemo(() => {
+    const result = [];
+    const HOMEPORTS = {
+      "Yokosuka": [35.29, 139.65],
+      "Pearl Harbor": [21.35, -157.95],
+      "San Diego": [32.72, -117.16],
+      "Norfolk": [36.85, -76.3],
+      "Bahrain": [26.23, 50.59],
+      "Rota": [36.62, -6.35],
+      "Sasebo": [33.16, 129.72]
+    };
+    if (intel.naval?.events) {
+      for (const ship of intel.naval.events) {
+        const hp = ship.meta?.homeport;
+        if (!hp || !HOMEPORTS[hp]) continue;
+        const [homeLat, homeLng] = HOMEPORTS[hp];
+        if (Math.abs(ship.lat - homeLat) < 2 && Math.abs(ship.lng - homeLng) < 2) continue;
+        const isCapital = ship.meta?.vesselType === "carrier_group";
+        result.push({
+          startLat: homeLat,
+          startLng: homeLng,
+          endLat: ship.lat,
+          endLng: ship.lng,
+          color: isCapital ? ["#39FF14", "#39FF1480"] : ["#00D2FF", "#00D2FF80"],
+          // cyan for escorts/destroyers
+          label: `${ship.label?.split("\u2014")[0]?.trim() || "VESSEL"} deployment from ${hp}`
+        });
+      }
+    }
+    if (intel.bases?.events) {
+      const pentagon = intel.bases.events.find((b) => b.id === "BASE-001");
+      if (pentagon) {
+        const forwardBaseIds = [
+          "BASE-003",
+          // Ramstein AB - USAFE/NATO HQ
+          "BASE-005",
+          // NSA Bahrain - 5th Fleet
+          "BASE-006",
+          // Camp Lemonnier - AFRICOM
+          "BASE-008",
+          // Al Dhafra AB - UAE
+          "BASE-021",
+          // Al Udeid - CENTCOM Forward
+          "BASE-022",
+          // Kadena AB - USAF Pacific
+          "BASE-023",
+          // Camp Humphreys - USFK
+          "BASE-025",
+          // Andersen AFB - Guam
+          "BASE-032"
+          // Diego Garcia - Indian Ocean
+        ];
+        for (const fwd of intel.bases.events) {
+          if (!forwardBaseIds.includes(fwd.id)) continue;
+          result.push({
+            startLat: pentagon.lat,
+            startLng: pentagon.lng,
+            endLat: fwd.lat,
+            endLng: fwd.lng,
+            color: ["#FF3131", "#FF313180"],
+            // red for command links
+            label: `COMLINK: Pentagon \u2192 ${fwd.label?.split("\u2014")[0]?.trim() || "FWD BASE"}`
+          });
+        }
+      }
+    }
+    return result;
+  }, [intel, activeLayers]);
+  const cablePaths = useMemo(
+    () => intel.infrastructure?.cablePaths || [],
+    [intel.infrastructure]
+  );
+  const layerCounts = useMemo(() => {
+    const counts = {};
+    for (const p of points) {
+      counts[p.layer] = (counts[p.layer] || 0) + 1;
+    }
+    if (cablePaths.length > 0) {
+      const uniqueCables = new Set(cablePaths.map((c) => c.name)).size;
+      counts["infrastructure"] = (counts["infrastructure"] || 0) + uniqueCables;
+    }
+    return counts;
+  }, [points, cablePaths]);
+  return <div className="h-screen w-full flex flex-col overflow-hidden"><div className="scanline-overlay" />{
+    /* Header */
+  }<header className="h-10 border-b border-border bg-card/80 flex items-center justify-between px-4 shrink-0"><div className="flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-primary tactical-pulse" /><h1 className="text-[11px] font-bold tracking-[0.3em] uppercase text-foreground"><span className="hidden sm:inline">GLOBAL COMMAND CENTER</span><span className="sm:hidden">GCC</span></h1></div><div className="flex items-center gap-3 text-[9px] text-muted-foreground"><span className="hidden sm:inline">{activeLayers.size} LAYERS ACTIVE</span>{intel.isLive ? <span className="text-tactical-glow">■ LIVE</span> : <span className="text-tactical-amber">■ NO DATA</span>}</div></header>{
+    /* Main */
+  }<div className="flex-1 flex min-h-0">{
+    /* Left Panel — desktop always visible; mobile: shown when intel tab active */
+  }<aside className={`flex flex-col bg-card/50 p-3 overflow-hidden shrink-0 border-r border-border
+          ${mobileTab === "intel" ? "flex-1" : "hidden"} md:flex md:flex-none md:w-72`}><IntelFeed /></aside>{
+    /* Center - Globe — desktop always visible; mobile: shown when globe tab active */
+  }<section className={`relative bg-background overflow-hidden
+          ${mobileTab === "globe" ? "flex-1" : "hidden"} md:flex md:flex-1`}><HudOverlay /><div className="absolute bottom-14 left-3 md:bottom-3 z-10 flex flex-col gap-1.5"><button
+    onClick={() => setClusterEnabled((v) => !v)}
+    className={`flex items-center gap-2 px-2.5 py-1.5 text-[8px] uppercase tracking-widest rounded-sm border transition-all ${clusterEnabled ? "border-primary/60 bg-primary/10 text-primary" : "border-border/40 bg-background/60 text-muted-foreground opacity-60 hover:opacity-90"}`}
+  ><span className={`w-1.5 h-1.5 rounded-full ${clusterEnabled ? "bg-primary tactical-pulse" : "bg-muted-foreground"}`} />{clusterEnabled ? "Clustering ON" : "Clustering OFF"}</button><LayerLegend
+    activeLayers={activeLayers}
+    selectedLayer={selectedLayer}
+    onToggle={toggleLayer}
+    onSelect={handleLayerSelect}
+  /></div><TacticalGlobe
+    activeLayers={activeLayers}
+    points={points}
+    rings={rings}
+    arcs={arcs}
+    cablePaths={cablePaths}
+    conflictZones={conflictZonePolygons}
+    clusterEnabled={clusterEnabled}
+    onAssetSelect={setSelectedAsset}
+  /></section>{
+    /* Right Panel — desktop always visible; mobile: shown when assets tab active */
+  }<aside className={`flex flex-col bg-card/50 p-3 overflow-hidden shrink-0 border-l border-border
+          ${mobileTab === "assets" ? "flex-1" : "hidden"} md:flex md:flex-none md:w-64`}><AssetTracker
+    selectedAsset={selectedAsset}
+    selectedLayer={selectedLayer}
+    activeLayers={activeLayers}
+    layerCounts={layerCounts}
+    points={points}
+    onAssetSelect={setSelectedAsset}
+    onClearLayer={() => setSelectedLayer(null)}
+  /></aside></div>{
+    /* Mobile bottom tab navigation */
+  }<nav className="md:hidden border-t border-border bg-card/90 flex h-11 shrink-0">{["globe", "intel", "assets"].map((tab) => {
+    const labels = { globe: "\u{1F310} Globe", intel: "\u{1F4E1} Intel", assets: "\u{1F3AF} Assets" };
+    const active = mobileTab === tab;
+    return <button
+      key={tab}
+      onClick={() => setMobileTab(tab)}
+      className={`flex-1 text-[9px] uppercase tracking-widest transition-colors border-t-2 ${active ? "text-primary border-primary bg-primary/5" : "text-muted-foreground border-transparent hover:text-foreground"}`}
+    >{labels[tab]}</button>;
+  })}</nav><div className="hidden md:block"><StatusBar layerCounts={layerCounts} isLive={intel.isLive} /></div></div>;
+};
+export default Index;
